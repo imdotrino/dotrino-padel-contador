@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-title" content="Padel">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Padel Scoreboard</title>
+<meta name="description" content="Padel match scoreboard: two touch panels, 0/15/30/40 scoring, games and sets, tie-break, optional golden point, serve indicator, undo and reset." />
+<link rel="canonical" href="https://padel.dotrino.com/" />
+<meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
+<meta property="og:site_name" content="Dotrino" />
+<meta property="og:title" content="Padel Scoreboard" />
+<meta property="og:description" content="Touch scoreboard for padel matches: points, games, sets and tie-break." />
+<meta property="og:url" content="https://padel.dotrino.com/" />
+<meta property="og:image" content="https://padel.dotrino.com/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Padel Scoreboard" />
+<meta name="twitter:description" content="Touch scoreboard for padel matches: points, games, sets and tie-break." />
+<meta name="twitter:image" content="https://padel.dotrino.com/og.jpg" />
+<style>
+  /* touch-action: manipulation → en iOS el doble-tap NO hace zoom (Safari ignora
+     user-scalable=no desde iOS 10); además quita el delay de 300ms al tocar. */
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    background: #111827;
+  }
+
+  /* --- Barra superior --- */
+  .topbar {
+    display: flex;
+    background: #111827;
+    border-bottom: 2px solid #1f2937;
+  }
+  .topbar button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 1.9vh;
+    font-weight: 700;
+    padding: 1.4vh 0;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    cursor: pointer;
+  }
+  .topbar button:active { background: #1f2937; }
+  .topbar-coin { flex: 0 0 auto; display: flex; align-items: center; padding: 0 12px; }
+  .btn-burger {
+    flex: 0 0 auto !important;
+    width: 12vw;
+    max-width: 56px;
+    font-size: 2.6vh !important;
+  }
+  .modo {
+    display: flex;
+    align-items: center;
+    gap: 2.5vw;
+    color: #9ca3af;
+    font-size: 1.8vh;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    flex-shrink: 0;
+  }
+  /* Selector de modo de puntuación: 3 opciones (ventaja / doble ventaja /
+     punto de oro). Reemplaza al antiguo toggle de 2 estados. */
+  .seg {
+    display: flex;
+    gap: 1.5vw;
+    flex-wrap: wrap;
+  }
+  .seg-btn {
+    flex: 1 1 auto;
+    white-space: nowrap;
+    padding: 1.3vh 2.5vw;
+    border: 1px solid #374151;
+    background: #1f2937;
+    color: #9ca3af;
+    border-radius: 10px;
+    font-size: 1.6vh;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .seg-btn:active { transform: scale(.97); }
+  .seg-btn.on {
+    background: #f59e0b;
+    color: #111827;
+    border-color: #f59e0b;
+  }
+  #idioma #lblEN { color: #fff; }
+  #idioma.es #lblEN { color: #9ca3af; }
+  #idioma.es #lblES { color: #fff; }
+  .switch {
+    position: relative;
+    width: 46px;
+    height: 26px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .switch input { display: none; }
+  .switch .pista {
+    position: absolute;
+    inset: 0;
+    background: #4b5563;
+    border-radius: 999px;
+    transition: background .2s;
+  }
+  .switch .bolita {
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 20px; height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .2s;
+  }
+  .switch input:checked + .pista { background: #f59e0b; }
+  .switch input:checked + .pista + .bolita { transform: translateX(20px); }
+
+  /* --- Marcador --- */
+  .marcador {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    position: relative;
+  }
+  .equipo {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 10vh;
+    color: #fff;
+    transition: background-color .2s;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .equipo.izq { background: #15803d; }
+  .equipo.der { background: #7c3aed; }
+
+  .nombre-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5vw;
+    width: 100%;
+    padding: 0 2vw;
+    margin-bottom: .6vh;
+  }
+  .nombre {
+    font-size: 4.2vw;
+    font-weight: 700;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed transparent;
+    color: #fff;
+    text-align: center;
+    flex: 1 1 0;
+    min-width: 0;
+    width: 100%;
+  }
+  .nombre:focus {
+    outline: none;
+    border-bottom-color: rgba(255,255,255,.6);
+  }
+  .edit-nombre {
+    width: 7vw;
+    height: 7vw;
+    max-width: 32px;
+    max-height: 32px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.5);
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    font-size: 3.5vw;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+  }
+  .edit-nombre:active { background: rgba(255,255,255,.3); }
+
+  .meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .4vh;
+    font-size: 2vh;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: rgba(255,255,255,.85);
+    text-transform: uppercase;
+    margin-bottom: .4vh;
+  }
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 1.6vw;
+  }
+  .meta .n { font-size: 2.6vh; }
+  .meta-row .lbl {
+    display: inline-block;
+    min-width: 13vw;
+    text-align: left;
+  }
+  .aj {
+    width: 6.5vw;
+    height: 6.5vw;
+    max-width: 30px;
+    max-height: 30px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.5);
+    background: rgba(255,255,255,.14);
+    color: #fff;
+    font-size: 3.6vw;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+  }
+  .aj:active { background: rgba(255,255,255,.35); }
+
+  .puntos {
+    font-size: 24vw;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .puntos.ad { color: #fde047; }
+
+  .saque {
+    position: absolute;
+    left: 50%;
+    bottom: 14vh;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .6vh;
+    pointer-events: none;
+    z-index: 5;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.5);
+  }
+  .saque svg { width: min(40vw, 26vh); height: auto; }
+
+  .serv-lbl {
+    margin-top: 1vh;
+    height: 2.6vh;
+    font-size: 2.2vh;
+    font-weight: 700;
+    letter-spacing: .12em;
+  }
+
+  .tiebadge {
+    position: absolute;
+    top: 1.2vh;
+    background: #fde047;
+    color: #111827;
+    font-size: 1.7vh;
+    font-weight: 800;
+    letter-spacing: .12em;
+    padding: .4vh 2vw;
+    border-radius: 999px;
+    display: none;
+  }
+  body.tiebreak .tiebadge { display: block; }
+
+  .toque {
+    position: absolute;
+    font-size: 12vh;
+    font-weight: 800;
+    opacity: 0;
+    pointer-events: none;
+  }
+  @keyframes pop {
+    0%   { opacity: .9; transform: scale(.4); }
+    100% { opacity: 0;  transform: scale(1.6); }
+  }
+  .toque.anim { animation: pop .5s ease-out; }
+
+  /* --- Barra de control --- */
+  .control {
+    display: flex;
+    background: #111827;
+    border-top: 2px solid #1f2937;
+  }
+  .control button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 1.9vh;
+    font-weight: 700;
+    padding: 1.6vh 0;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    cursor: pointer;
+  }
+  .control button:active { background: #1f2937; }
+  .btn-saque {
+    background: #f59e0b !important;
+    color: #111827 !important;
+    font-size: 2.2vh !important;
+  }
+  .btn-saque:active { background: #d97706 !important; }
+
+  /* --- Modales --- */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    padding: 4vh 4vw;
+  }
+  .modal.abierto { display: flex; }
+  .modal-caja {
+    background: #1f2937;
+    color: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2vh 4vw;
+    border-bottom: 1px solid #374151;
+  }
+  .modal-head h2 {
+    font-size: 2.4vh;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  .modal-cerrar {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 3vh;
+    cursor: pointer;
+    padding: 0 1vw;
+  }
+  .modal-body {
+    overflow-y: auto;
+    padding: 1vh 0;
+  }
+  .resultado {
+    display: flex;
+    align-items: center;
+    gap: 2vw;
+    padding: 1.5vh 4vw;
+    border-bottom: 1px solid #374151;
+  }
+  .resultado:last-child { border-bottom: none; }
+  .resultado-info { flex: 1; min-width: 0; }
+  .resultado-fecha {
+    font-size: 1.5vh;
+    color: #9ca3af;
+    margin-bottom: .4vh;
+  }
+  .resultado-marcador {
+    font-size: 2.1vh;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .resultado-marcador .gana { color: #fde047; }
+  .resultado-sets {
+    font-size: 1.7vh;
+    color: #cbd5e1;
+    margin-top: .4vh;
+    font-variant-numeric: tabular-nums;
+  }
+  .borrar {
+    background: #b91c1c;
+    border: none;
+    color: #fff;
+    border-radius: 8px;
+    padding: 1vh 3vw;
+    font-size: 1.8vh;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .borrar:active { background: #7f1d1d; }
+  .vacio {
+    padding: 4vh 4vw;
+    text-align: center;
+    color: #9ca3af;
+    font-size: 2vh;
+  }
+  .opcion {
+    padding: 2.5vh 4vw;
+  }
+  .opcion-label {
+    font-size: 2.1vh;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .opcion-desc {
+    font-size: 1.7vh;
+    color: #9ca3af;
+    margin-top: .6vh;
+    margin-bottom: 2vh;
+    line-height: 1.4;
+  }
+
+  /* Solo en web (pantalla ancha + puntero fino): sets y games más grandes,
+     y los botones +/- más pequeños. No afecta a móvil/táctil. */
+  @media (min-width: 820px) and (pointer: fine) {
+    .meta { font-size: 3vh; gap: .8vh; }
+    .meta .n { font-size: 5.2vh; }
+    .meta-row { gap: 1vw; }
+    .aj {
+      width: 22px;
+      height: 22px;
+      font-size: 16px;
+      border-width: 1px;
+    }
+  }
+</style>
+<!-- Analítica cookieless autohosteada (GoatCounter); no cuenta en localhost/LAN. -->
+<script>window.goatcounter={path:function(p){return location.hostname+p}}</script>
+<script data-goatcounter="https://goat.dotrino.com/count" async src="https://goat.dotrino.com/count.js"></script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Padel Scoreboard",
+      "url": "https://padel.dotrino.com/",
+      "description": "Touch scoreboard for padel matches: points, games, sets and tie-break.",
+      "applicationCategory": "SportsApplication",
+      "operatingSystem": "Web",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "publisher": { "@type": "Organization", "name": "Dotrino", "url": "https://dotrino.com/" }
+    }
+    </script>
+</head>
+<body>
+
+  <div class="topbar">
+    <dotrino-back style="align-self:center;color:#e2e8f0;--cc-back-size:36px;margin:0 2px"></dotrino-back>
+    <button id="btnResultados" data-i18n="results">📋 Results</button>
+    <button id="btnInstalar" data-i18n="install" style="display:none">⬇ Install</button>
+    <dotrino-support class="topbar-coin" href="https://ko-fi.com/dotrino" repo="dotrino/padel-contador" discord="https://discord.gg/D648uq7cth"></dotrino-support>
+    <button id="btnOpciones" class="btn-burger" data-i18n-title="optionsTitle" title="Options">☰</button>
+  </div>
+
+  <div class="marcador">
+    <div class="equipo izq activo" id="eqIzq">
+      <div class="nombre-wrap">
+        <input class="nombre" id="nomIzq" value="Team A" maxlength="14" readonly>
+        <button class="edit-nombre" data-target="nomIzq" data-i18n-title="editName" title="Editar nombre">✎</button>
+      </div>
+      <div class="meta" id="metaIzq"></div>
+      <div class="puntos" id="ptsIzq">0</div>
+      <div class="serv-lbl" id="servIzq"></div>
+      <div class="tiebadge">TIE-BREAK</div>
+      <div class="toque" id="toqueIzq">+1</div>
+    </div>
+    <div class="equipo der" id="eqDer">
+      <div class="nombre-wrap">
+        <input class="nombre" id="nomDer" value="Team B" maxlength="14" readonly>
+        <button class="edit-nombre" data-target="nomDer" data-i18n-title="editName" title="Editar nombre">✎</button>
+      </div>
+      <div class="meta" id="metaDer"></div>
+      <div class="puntos" id="ptsDer">0</div>
+      <div class="serv-lbl" id="servDer"></div>
+      <div class="tiebadge">TIE-BREAK</div>
+      <div class="toque" id="toqueDer">+1</div>
+    </div>
+    <div class="saque" id="saque"></div>
+  </div>
+
+  <div class="control">
+    <button id="btnDeshacer" data-i18n="undo">↶ Undo</button>
+    <button class="btn-saque" id="btnSaque" data-i18n="serveBtn">⇄ Serve</button>
+    <button id="btnNuevo" data-i18n="newMatch">+ New</button>
+  </div>
+
+  <div class="modal" id="modalResultados">
+    <div class="modal-caja">
+      <div class="modal-head">
+        <h2 data-i18n="resultsH">Results</h2>
+        <button class="modal-cerrar" id="btnCerrarModal">✕</button>
+      </div>
+      <div class="modal-body" id="listaResultados"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalOpciones">
+    <div class="modal-caja">
+      <div class="modal-head">
+        <h2 data-i18n="optionsH">Options</h2>
+        <button class="modal-cerrar" id="btnCerrarOpciones">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="opcion">
+          <div class="opcion-info">
+            <div class="opcion-label" data-i18n="scoringMode">Scoring mode</div>
+            <div class="opcion-desc" id="scoringDesc"></div>
+          </div>
+          <div class="seg" id="modo" role="group" aria-label="Scoring mode">
+            <button type="button" class="seg-btn" data-scoring="ventaja" data-i18n="advantage">Advantage</button>
+            <button type="button" class="seg-btn" data-scoring="doble" data-i18n="doubleAdv">Double advantage</button>
+            <button type="button" class="seg-btn" data-scoring="oro" data-i18n="golden">Golden point</button>
+          </div>
+        </div>
+        <div class="opcion">
+          <div class="opcion-info">
+            <div class="opcion-label" data-i18n="language">Language</div>
+          </div>
+          <div class="modo" id="idioma">
+            <span id="lblEN">EN</span>
+            <label class="switch">
+              <input type="checkbox" id="cfgIdioma">
+              <span class="pista"></span><span class="bolita"></span>
+            </label>
+            <span id="lblES">ES</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const STORAGE_KEY = 'padel_resultados';
+  const ACTUAL_KEY  = 'padel_actual';
+  const CONFIG_KEY  = 'padel_config';
+
+  // Configuración del partido. Por defecto: punto de oro. El partido no termina
+  // solo: los sets se acumulan sin límite (lo cierra el botón Nuevo).
+  // scoring: 'ventaja' (clásica, ganar por 2) | 'doble' (doble ventaja / Star
+  // Point FIP: 2 ventajas y luego punto de oro) | 'oro' (punto de oro directo).
+  const config = {
+    scoring: 'oro',
+    lang: (navigator.language || 'en').toLowerCase().startsWith('es') ? 'es' : 'en'
+  };
+
+  // Diccionario i18n. Nota: GAME/SET/TIE-BREAK se usan igual en ES y EN.
+  const I18N = {
+    en: {
+      results: '📋 Results', install: '⬇ Install', optionsTitle: 'Options',
+      editName: 'Edit name', undo: '↶ Undo', serveBtn: '⇄ Serve', newMatch: '+ New',
+      resultsH: 'Results', optionsH: 'Options', scoringMode: 'Scoring mode',
+      advantage: 'Advantage', doubleAdv: 'Double advantage', golden: 'Golden point',
+      desc_ventaja: 'You must win the game by two points — at 40-40 it stays deuce until someone leads by two.',
+      desc_doble: '<b>Star Point</b> (FIP 2026): at 40-40 you play an advantage; if it goes back to deuce, a second advantage; on a third deuce a <b>golden point</b> decides the game.',
+      desc_oro: 'At 40-40 the next point decides the game (sudden death).',
+      language: 'Language',
+      serve: 'SERVE', confirmNew: 'Start a new match? The current score will be saved.',
+      noResults: 'No saved results.', delete: 'Delete'
+    },
+    es: {
+      results: '📋 Resultados', install: '⬇ Instalar', optionsTitle: 'Opciones',
+      editName: 'Editar nombre', undo: '↶ Deshacer', serveBtn: '⇄ Saque', newMatch: '+ Nuevo',
+      resultsH: 'Resultados', optionsH: 'Opciones', scoringMode: 'Modo de puntuación',
+      advantage: 'Ventaja', doubleAdv: 'Doble ventaja', golden: 'Punto de oro',
+      desc_ventaja: 'Hay que ganar el juego por dos puntos: en 40-40 sigue en iguales hasta que alguien saca dos de diferencia.',
+      desc_doble: '<b>Star Point</b> (FIP 2026): en 40-40 se juega una ventaja; si vuelve a iguales, una segunda ventaja; a la tercera igualdad un <b>punto de oro</b> define el juego.',
+      desc_oro: 'En 40-40 el siguiente punto define el juego (muerte súbita).',
+      language: 'Idioma',
+      serve: 'SAQUE', confirmNew: '¿Empezar un partido nuevo? El marcador actual se guardará.',
+      noResults: 'No hay resultados guardados.', delete: 'Borrar'
+    }
+  };
+  const t = k => (I18N[config.lang] || I18N.en)[k];
+
+  // Estado del partido. p = puntos del juego actual (0..40 / ventaja, o nº en tie-break),
+  // j = juegos del set actual, s = sets ganados.
+  const estado = {
+    izq: { p: 0, j: 0, s: 0 },
+    der: { p: 0, j: 0, s: 0 },
+    saque: 'izq',
+    gameNum: 0,       // games jugados en el partido (rota el orden de saque P1/P2)
+    tiebreak: false,
+    setsHist: [],     // sets cerrados: [{ izq, der }] (juegos)
+    historial: []     // instantáneas para deshacer
+  };
+
+  const otro = l => l === 'izq' ? 'der' : 'izq';
+  const flipSaque = () => { estado.saque = otro(estado.saque); };
+
+  // --- Persistencia ---
+  function leerConfig() {
+    try {
+      const c = JSON.parse(localStorage.getItem(CONFIG_KEY));
+      if (c && ['ventaja', 'doble', 'oro'].includes(c.scoring)) config.scoring = c.scoring;
+      else if (c && typeof c.puntoOro === 'boolean') config.scoring = c.puntoOro ? 'oro' : 'ventaja';
+      if (c && (c.lang === 'es' || c.lang === 'en')) config.lang = c.lang;
+    } catch {}
+  }
+  function guardarConfig() {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  }
+
+  function snapshot() {
+    return {
+      izq: { ...estado.izq },
+      der: { ...estado.der },
+      saque: estado.saque,
+      gameNum: estado.gameNum,
+      tiebreak: estado.tiebreak,
+      setsHist: estado.setsHist.map(s => ({ ...s }))
+    };
+  }
+  function aplicar(s) {
+    estado.izq = { ...s.izq };
+    estado.der = { ...s.der };
+    estado.saque = s.saque;
+    estado.gameNum = s.gameNum || 0;
+    estado.tiebreak = s.tiebreak;
+    estado.setsHist = s.setsHist.map(x => ({ ...x }));
+  }
+  function guardar() { estado.historial.push(snapshot()); }
+
+  function guardarActual() {
+    localStorage.setItem(ACTUAL_KEY, JSON.stringify({
+      ...snapshot(),
+      historial: estado.historial,
+      nomIzq: $('nomIzq').value,
+      nomDer: $('nomDer').value
+    }));
+  }
+  function cargarActual() {
+    try {
+      const d = JSON.parse(localStorage.getItem(ACTUAL_KEY));
+      if (!d) return;
+      aplicar(d);
+      estado.historial = Array.isArray(d.historial) ? d.historial : [];
+      if (d.nomIzq) $('nomIzq').value = d.nomIzq;
+      if (d.nomDer) $('nomDer').value = d.nomDer;
+    } catch {}
+  }
+
+  // --- Lógica de puntuación ---
+  function ganarPunto(lado) {
+    guardar();
+    const o = otro(lado);
+    const A = estado[lado], B = estado[o];
+
+    if (estado.tiebreak) {
+      A.p++;
+      // El saque pasa tras el 1er punto y luego cada 2 puntos.
+      if ((estado.izq.p + estado.der.p) % 2 === 1) flipSaque();
+      if (A.p >= 7 && A.p - B.p >= 2) cerrarSet(lado, true);
+    } else {
+      A.p++;
+      // Puntos de diferencia para cerrar el juego según el modo:
+      //  · 'oro'    → 1: en 40-40 el siguiente punto define (muerte súbita).
+      //  · 'ventaja'→ 2: hay que ganar por dos (la igualdad se repite sin fin).
+      //  · 'doble'  → 2, pero a la 3ª igualdad (ambos en 5 = se gastaron las dos
+      //               ventajas) pasa a punto de oro = 1. Es el "Star Point" FIP.
+      let need = 2;
+      if (config.scoring === 'oro') need = 1;
+      else if (config.scoring === 'doble' && Math.min(A.p, B.p) >= 5) need = 1;
+      if (A.p >= 4 && A.p - B.p >= need) ganarJuego(lado);
+    }
+    animarToque(lado);
+    render();
+  }
+
+  function ganarJuego(lado) {
+    const o = otro(lado);
+    estado[lado].j++;
+    estado.izq.p = 0; estado.der.p = 0;
+    estado.gameNum++;
+    flipSaque(); // el saque cambia de pareja en cada juego
+    if (estado[lado].j >= 6 && estado[lado].j - estado[o].j >= 2) {
+      cerrarSet(lado, false);
+    } else if (estado.izq.j === 6 && estado.der.j === 6) {
+      estado.tiebreak = true;
+    }
+  }
+
+  function cerrarSet(lado, viaTie) {
+    const o = otro(lado);
+    if (viaTie) { estado[lado].j = 7; estado[o].j = 6; }
+    estado.setsHist.push({ izq: estado.izq.j, der: estado.der.j });
+    estado[lado].s++;
+    estado.izq.j = 0; estado.der.j = 0;
+    estado.izq.p = 0; estado.der.p = 0;
+    estado.tiebreak = false;
+  }
+
+  // Ajuste manual de sets/games (+/−) para corregir el marcador.
+  function ajustar(lado, tipo, delta) {
+    const nuevo = estado[lado][tipo] + delta;
+    if (nuevo < 0) return;
+    guardar();
+    estado[lado][tipo] = nuevo;
+    if (tipo === 'j') estado.tiebreak = (estado.izq.j === 6 && estado.der.j === 6);
+    render();
+  }
+
+  function dispPunto(lado) {
+    const o = otro(lado);
+    const a = estado[lado].p, b = estado[o].p;
+    if (estado.tiebreak) return { txt: String(a), ad: false };
+    if (a >= 3 && b >= 3) {
+      if (a === b) return { txt: '40', ad: false };
+      return a > b ? { txt: 'AD', ad: true } : { txt: '40', ad: false };
+    }
+    return { txt: ['0', '15', '30', '40'][a], ad: false };
+  }
+
+  // --- Render ---
+  function render() {
+    document.body.classList.toggle('tiebreak', estado.tiebreak);
+    // Lado R/L alterna en cada punto; el jugador rota P1,P1,P2,P2 por game
+    // (P1-Eq1, P1-Eq2, P2-Eq1, P2-Eq2).
+    const ladoSaque = ((estado.izq.p + estado.der.p) % 2) === 0 ? 'R' : 'L';
+    const jugador = (Math.floor(estado.gameNum / 2) % 2) === 0 ? 'P1' : 'P2';
+    ['izq', 'der'].forEach(lado => {
+      const d = dispPunto(lado);
+      const pts = $('pts' + cap(lado));
+      pts.textContent = d.txt;
+      pts.classList.toggle('ad', d.ad);
+      $('meta' + cap(lado)).innerHTML =
+        `<div class="meta-row">` +
+          `<button class="aj" data-lado="${lado}" data-tipo="s" data-delta="-1">−</button>` +
+          `<span class="n">${estado[lado].s}</span><span class="lbl">sets</span>` +
+          `<button class="aj" data-lado="${lado}" data-tipo="s" data-delta="1">+</button>` +
+        `</div>` +
+        `<div class="meta-row">` +
+          `<button class="aj" data-lado="${lado}" data-tipo="j" data-delta="-1">−</button>` +
+          `<span class="n">${estado[lado].j}</span><span class="lbl">games</span>` +
+          `<button class="aj" data-lado="${lado}" data-tipo="j" data-delta="1">+</button>` +
+        `</div>`;
+      const activo = estado.saque === lado;
+      $('eq' + cap(lado)).classList.toggle('activo', activo);
+      // Etiqueta "SERVE Pn" debajo del puntaje del equipo que saca.
+      $('serv' + cap(lado)).textContent = activo ? '● ' + t('serve') + ' ' + jugador : '';
+    });
+    // Cancha única, centrada sobre la red. Lado R/L alterna en cada punto.
+    $('saque').innerHTML = canchaSaque(estado.saque, ladoSaque);
+    document.querySelectorAll('#modo .seg-btn').forEach(b =>
+      b.classList.toggle('on', b.dataset.scoring === config.scoring));
+    guardarActual();
+  }
+
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+  // Aplica el idioma a los textos estáticos (data-i18n) y refresca lo dinámico.
+  function aplicarIdioma() {
+    document.documentElement.lang = config.lang;
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      el.textContent = t(el.dataset.i18n);
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach(el => {
+      el.innerHTML = t(el.dataset.i18nHtml);
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+      el.title = t(el.dataset.i18nTitle);
+    });
+    $('idioma').classList.toggle('es', config.lang === 'es');
+    $('cfgIdioma').checked = config.lang === 'es';
+    actualizarDescModo();
+    render();
+  }
+
+  // Descripción del modo de puntuación elegido (cambia con el modo y el idioma).
+  function actualizarDescModo() {
+    $('scoringDesc').innerHTML = t('desc_' + config.scoring);
+  }
+
+  // Mini cancha landscape (vista superior): red vertical en el centro, mitad
+  // izquierda = equipo izq, mitad derecha = equipo der. El que saca está en SU
+  // mitad y sirve cruzado (diagonal) a la caja del rival. R/L = derecha/izquierda
+  // del servidor mirando a la red.
+  function canchaSaque(lado, side) {
+    const izq = lado === 'izq';
+    // izq mira a la derecha: R = abajo, L = arriba. der mira a la izquierda: R = arriba, L = abajo.
+    const srvTop = izq ? (side === 'L') : (side === 'R');
+    const srvLeft = izq;                 // caja del servidor, en su propia mitad
+    const recLeft = !srvLeft, recTop = !srvTop;  // receptor en diagonal
+    const bx = l => l ? 28 : 50;         // x de la caja (izq de la mitad)
+    const cx = (l, t) => (l ? 39 : 61);  // centro x
+    const cy = t => (t ? 18 : 46);       // centro y
+    const lin = 'stroke="rgba(255,255,255,.85)" fill="none"';
+    const ax = cx(srvLeft, srvTop), ay = cy(srvTop);
+    const ex = cx(recLeft, recTop), ey = cy(recTop);
+    const mid = 'arr-' + lado;
+    return `<svg viewBox="0 0 100 64" aria-hidden="true">
+      <defs><marker id="${mid}" markerWidth="6" markerHeight="6" refX="4" refY="3"
+        orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#fde047"/></marker></defs>
+      <rect x="4" y="4" width="92" height="56" ${lin} stroke-width="2"/>
+      <line x1="50" y1="0" x2="50" y2="64" ${lin} stroke-width="2.6"/>
+      <line x1="28" y1="4" x2="28" y2="60" ${lin} stroke-width="1"/>
+      <line x1="72" y1="4" x2="72" y2="60" ${lin} stroke-width="1"/>
+      <line x1="28" y1="32" x2="72" y2="32" ${lin} stroke-width="1"/>
+      <rect x="${bx(recLeft)}" y="${recTop ? 4 : 32}" width="22" height="28" fill="rgba(255,255,255,.18)" stroke="none"/>
+      <rect x="${bx(srvLeft)}" y="${srvTop ? 4 : 32}" width="22" height="28" fill="rgba(253,224,71,.55)" stroke="none"/>
+      <line x1="${ax}" y1="${ay}" x2="${ex}" y2="${ey}" stroke="#fde047"
+        stroke-width="2.4" marker-end="url(#${mid})"/>
+      <circle cx="${ax}" cy="${ay}" r="2.8" fill="#fff"/>
+    </svg>`;
+  }
+
+  function animarToque(lado) {
+    const el = $('toque' + cap(lado));
+    el.classList.remove('anim');
+    void el.offsetWidth;
+    el.classList.add('anim');
+  }
+
+  function deshacer() {
+    const prev = estado.historial.pop();
+    if (!prev) return;
+    aplicar(prev);
+    render();
+  }
+
+  function cambiarSaque() {
+    guardar();
+    flipSaque();
+    render();
+  }
+
+  // --- Resultados guardados ---
+  function leerResultados() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch { return []; }
+  }
+  function escribirResultados(arr) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+  }
+
+  function setsActuales() {
+    const sets = estado.setsHist.map(s => ({ ...s }));
+    if (estado.izq.j > 0 || estado.der.j > 0 || estado.izq.p > 0 || estado.der.p > 0) {
+      sets.push({ izq: estado.izq.j, der: estado.der.j });
+    }
+    return sets;
+  }
+
+  function hayProgreso() {
+    return estado.izq.s > 0 || estado.der.s > 0 ||
+           estado.izq.j > 0 || estado.der.j > 0 ||
+           estado.izq.p > 0 || estado.der.p > 0 ||
+           estado.setsHist.length > 0;
+  }
+
+  function nuevoPartido() {
+    if (hayProgreso()) {
+      if (!confirm(t('confirmNew'))) return;
+      const sets = setsActuales();
+      let sIzq = 0, sDer = 0;
+      sets.forEach(s => { if (s.izq > s.der) sIzq++; else if (s.der > s.izq) sDer++; });
+      const resultados = leerResultados();
+      resultados.unshift({
+        fecha: Date.now(),
+        nomIzq: $('nomIzq').value || 'Team A',
+        nomDer: $('nomDer').value || 'Team B',
+        sets, setsIzq: sIzq, setsDer: sDer
+      });
+      escribirResultados(resultados);
+    }
+    reiniciar();
+  }
+
+  function reiniciar() {
+    estado.izq = { p: 0, j: 0, s: 0 };
+    estado.der = { p: 0, j: 0, s: 0 };
+    estado.saque = 'izq';
+    estado.gameNum = 0;
+    estado.tiebreak = false;
+    estado.setsHist = [];
+    estado.historial = [];
+    render();
+  }
+
+  function formatearFecha(ts) {
+    const d = new Date(ts);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${dd}/${mm} ${hh}:${mi}`;
+  }
+
+  function pintarResultados() {
+    const cont = $('listaResultados');
+    const resultados = leerResultados();
+    if (resultados.length === 0) {
+      cont.innerHTML = `<div class="vacio">${t('noResults')}</div>`;
+      return;
+    }
+    cont.innerHTML = '';
+    resultados.forEach((r, i) => {
+      const izqGana = r.setsIzq > r.setsDer;
+      const derGana = r.setsDer > r.setsIzq;
+      const setsTxt = (r.sets || []).map(s => `${s.izq}-${s.der}`).join('  ');
+      const fila = document.createElement('div');
+      fila.className = 'resultado';
+      fila.innerHTML = `
+        <div class="resultado-info">
+          <div class="resultado-fecha">${formatearFecha(r.fecha)}</div>
+          <div class="resultado-marcador">
+            <span class="${izqGana ? 'gana' : ''}">${izqGana ? '🏆 ' : ''}${escapar(r.nomIzq)} ${r.setsIzq}</span>
+            —
+            <span class="${derGana ? 'gana' : ''}">${r.setsDer} ${escapar(r.nomDer)}${derGana ? ' 🏆' : ''}</span>
+          </div>
+          <div class="resultado-sets">${setsTxt}</div>
+        </div>
+        <button class="borrar" data-idx="${i}">${t('delete')}</button>
+      `;
+      cont.appendChild(fila);
+    });
+    cont.querySelectorAll('.borrar').forEach(b => {
+      b.addEventListener('click', () => {
+        const idx = Number(b.dataset.idx);
+        const arr = leerResultados();
+        arr.splice(idx, 1);
+        escribirResultados(arr);
+        pintarResultados();
+      });
+    });
+  }
+
+  function escapar(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  function abrirResultados() { pintarResultados(); $('modalResultados').classList.add('abierto'); }
+  function cerrarResultados() { $('modalResultados').classList.remove('abierto'); }
+
+  // --- Eventos ---
+  function tocarPanel(lado) {
+    return e => {
+      if (e.target.closest('.nombre-wrap')) return;
+      if (e.target.closest('.aj')) return;
+      ganarPunto(lado);
+    };
+  }
+  $('eqIzq').addEventListener('click', tocarPanel('izq'));
+  $('eqDer').addEventListener('click', tocarPanel('der'));
+
+  // Botones +/− de sets y games (delegado: se recrean en cada render).
+  document.querySelector('.marcador').addEventListener('click', e => {
+    const b = e.target.closest('.aj');
+    if (!b) return;
+    e.stopPropagation();
+    ajustar(b.dataset.lado, b.dataset.tipo, Number(b.dataset.delta));
+  });
+
+  document.querySelectorAll('.edit-nombre').forEach(b => {
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      const input = $(b.dataset.target);
+      input.readOnly = false;
+      input.focus();
+      input.select();
+    });
+  });
+  document.querySelectorAll('.nombre').forEach(inp => {
+    inp.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!inp.readOnly) return;
+      inp.readOnly = false;
+      inp.focus();
+      inp.select();
+    });
+    inp.addEventListener('blur', () => { inp.readOnly = true; guardarActual(); });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    });
+  });
+
+  $('btnSaque').addEventListener('click', cambiarSaque);
+  $('btnDeshacer').addEventListener('click', deshacer);
+  $('btnNuevo').addEventListener('click', nuevoPartido);
+  $('btnResultados').addEventListener('click', abrirResultados);
+  $('btnCerrarModal').addEventListener('click', cerrarResultados);
+  $('modalResultados').addEventListener('click', e => {
+    if (e.target === $('modalResultados')) cerrarResultados();
+  });
+
+  // Panel de opciones (burger).
+  const abrirOpciones = () => $('modalOpciones').classList.add('abierto');
+  const cerrarOpciones = () => $('modalOpciones').classList.remove('abierto');
+  $('btnOpciones').addEventListener('click', abrirOpciones);
+  $('btnCerrarOpciones').addEventListener('click', cerrarOpciones);
+  $('modalOpciones').addEventListener('click', e => {
+    if (e.target === $('modalOpciones')) cerrarOpciones();
+  });
+
+  // Modo de puntuación: ventaja / doble ventaja / punto de oro (se aplica al
+  // instante, sin reiniciar el juego en curso).
+  document.querySelectorAll('#modo .seg-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      config.scoring = b.dataset.scoring;
+      guardarConfig();
+      actualizarDescModo();
+      render();
+    });
+  });
+
+  // Toggle de idioma ES ⟷ EN (se aplica al instante).
+  $('cfgIdioma').addEventListener('change', e => {
+    config.lang = e.target.checked ? 'es' : 'en';
+    guardarConfig();
+    aplicarIdioma();
+    if ($('modalResultados').classList.contains('abierto')) pintarResultados();
+  });
+
+  // --- Arranque ---
+  leerConfig();
+  cargarActual();
+  aplicarIdioma();
+
+  // --- PWA: service worker + botón Instalar ---
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+
+  let deferredPrompt = null;
+  const btnInstalar = $('btnInstalar');
+  const yaInstalada = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+
+  if (!yaInstalada()) {
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      deferredPrompt = e;
+      btnInstalar.style.display = '';
+    });
+  }
+  btnInstalar.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    btnInstalar.style.display = 'none';
+  });
+  window.addEventListener('appinstalled', () => {
+    btnInstalar.style.display = 'none';
+    deferredPrompt = null;
+  });
+</script>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@dotrino/support@0.4/src/index.js"></script>
+  <!-- Navegación "volver" unificada del ecosistema: chevron del header + botón
+       físico de Android / gesto de iOS / atrás del navegador → cierra los modales
+       (resultados / opciones); si no hay nada → dotrino.com. -->
+  <script type="module">
+    import { createBackNav } from 'https://cdn.jsdelivr.net/npm/@dotrino/nav@0.2/src/index.js'
+    const nav = createBackNav()
+    const bindModal = (id) => {
+      const el = document.getElementById(id); if (!el) return
+      let handle = null
+      const sync = () => {
+        const open = el.classList.contains('abierto')
+        if (open && !handle) handle = nav.open(() => el.classList.remove('abierto'))
+        else if (!open && handle) { const h = handle; handle = null; h.close() }
+      }
+      new MutationObserver(sync).observe(el, { attributes: true, attributeFilter: ['class'] })
+      sync()
+    }
+    ;['modalResultados', 'modalOpciones'].forEach(bindModal)
+  </script>
+</body>
+</html>
