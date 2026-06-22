@@ -1,5 +1,7 @@
 # Contador Pádel
 
+> **Parte del ecosistema [Dotrino](https://dotrino.com).** Misión: aplicaciones que resuelven problemas comunes, respetando tu privacidad — sin anuncios, sin cookies, sin rastreo de datos, sin vender tu identidad a nadie.
+
 Marcador para partidos de pádel: dos paneles táctiles con puntuación de tenis (0/15/30/40, juegos y sets), indicador de saque, tie-break, punto de oro opcional, deshacer y reinicio. Parte del ecosistema [Dotrino](https://dotrino.github.io/dotrino/).
 
 ## Filosofía
