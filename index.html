@@ -44,14 +44,16 @@
     background: #111827;
   }
 
-  /* --- Barra superior --- */
-  .topbar {
-    display: flex;
-    background: #111827;
-    border-bottom: 2px solid #1f2937;
+  /* --- Barra superior: estilos del light DOM para <dotrino-topbar> --- */
+  dotrino-topbar {
+    --dotrino-topbar-bg: #111827;
+    --dotrino-topbar-border: #1f2937;
+    --dotrino-topbar-text: #e2e8f0;
+    --dotrino-topbar-muted: #9ca3af;
+    --dotrino-topbar-accent: #f59e0b;
+    --dotrino-topbar-accent-text: #111827;
   }
-  .topbar button {
-    flex: 1;
+  .tb-action {
     border: none;
     background: transparent;
     color: #9ca3af;
@@ -62,25 +64,17 @@
     letter-spacing: .05em;
     cursor: pointer;
   }
-  .topbar button:active { background: #1f2937; }
-  .topbar-coin { flex: 0 0 auto; display: flex; align-items: center; padding: 0 12px; }
+  .tb-action:active { color: #fff; }
   .btn-burger {
-    flex: 0 0 auto !important;
     width: 12vw;
     max-width: 56px;
     font-size: 2.6vh !important;
-  }
-  .modo {
-    display: flex;
-    align-items: center;
-    gap: 2.5vw;
+    background: transparent;
+    border: none;
     color: #9ca3af;
-    font-size: 1.8vh;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    flex-shrink: 0;
+    cursor: pointer;
   }
+  .btn-burger:active { color: #fff; }
   /* Selector de modo de puntuación: 3 opciones (ventaja / doble ventaja /
      punto de oro). Reemplaza al antiguo toggle de 2 estados. */
   .seg {
@@ -109,35 +103,6 @@
     color: #111827;
     border-color: #f59e0b;
   }
-  #idioma #lblEN { color: #fff; }
-  #idioma.es #lblEN { color: #9ca3af; }
-  #idioma.es #lblES { color: #fff; }
-  .switch {
-    position: relative;
-    width: 46px;
-    height: 26px;
-    flex-shrink: 0;
-    cursor: pointer;
-  }
-  .switch input { display: none; }
-  .switch .pista {
-    position: absolute;
-    inset: 0;
-    background: #4b5563;
-    border-radius: 999px;
-    transition: background .2s;
-  }
-  .switch .bolita {
-    position: absolute;
-    top: 3px; left: 3px;
-    width: 20px; height: 20px;
-    background: #fff;
-    border-radius: 50%;
-    transition: transform .2s;
-  }
-  .switch input:checked + .pista { background: #f59e0b; }
-  .switch input:checked + .pista + .bolita { transform: translateX(20px); }
-
   /* --- Marcador --- */
   .marcador {
     flex: 1;
@@ -464,6 +429,11 @@
     }
   }
 </style>
+<!-- Barra superior estándar del ecosistema (@dotrino/topbar, CONVENCIONES §5/§6.1).
+     OJO: por CDN va SIEMPRE con +esm, no con /src/index.js (sus imports desnudos
+     no resuelven en el navegador). Trae dentro <dotrino-back>, <dotrino-support>,
+     toggle de idioma y botón de perfil. -->
+<script type="module" src="https://cdn.jsdelivr.net/npm/@dotrino/topbar@0.5/+esm"></script>
 <!-- Analítica cookieless autohosteada (GoatCounter); no cuenta en localhost/LAN. -->
 <script>window.goatcounter={path:function(p){return location.hostname+p}}</script>
 <script data-goatcounter="https://goat.dotrino.com/count" async src="https://goat.dotrino.com/count.js"></script>
@@ -483,13 +453,14 @@
 </head>
 <body>
 
-  <div class="topbar">
-    <dotrino-back style="align-self:center;color:#e2e8f0;--cc-back-size:36px;margin:0 2px"></dotrino-back>
-    <button id="btnResultados" data-i18n="results">📋 Results</button>
-    <button id="btnInstalar" data-i18n="install" style="display:none">⬇ Install</button>
-    <dotrino-support class="topbar-coin" href="https://ko-fi.com/dotrino" repo="imdotrino/dotrino-padel-contador" discord="https://discord.gg/D648uq7cth"></dotrino-support>
-    <button id="btnOpciones" class="btn-burger" data-i18n-title="optionsTitle" title="Options">☰</button>
-  </div>
+  <dotrino-topbar brand="Padel" icon="./icon.svg"
+    support-repo="imdotrino/dotrino-padel-contador"
+    support-discord="https://discord.gg/D648uq7cth"
+    profile>
+    <button id="btnResultados" class="tb-action" data-i18n="results">📋 Results</button>
+    <button id="btnInstalar" class="tb-action" data-i18n="install" style="display:none">⬇ Install</button>
+    <button id="btnOpciones" class="btn-burger" data-i18n-title="optionsTitle" title="Options" slot="trailing">☰</button>
+  </dotrino-topbar>
 
   <div class="marcador">
     <div class="equipo izq activo" id="eqIzq">
@@ -549,19 +520,6 @@
             <button type="button" class="seg-btn" data-scoring="ventaja" data-i18n="advantage">Advantage</button>
             <button type="button" class="seg-btn" data-scoring="doble" data-i18n="doubleAdv">Double advantage</button>
             <button type="button" class="seg-btn" data-scoring="oro" data-i18n="golden">Golden point</button>
-          </div>
-        </div>
-        <div class="opcion">
-          <div class="opcion-info">
-            <div class="opcion-label" data-i18n="language">Language</div>
-          </div>
-          <div class="modo" id="idioma">
-            <span id="lblEN">EN</span>
-            <label class="switch">
-              <input type="checkbox" id="cfgIdioma">
-              <span class="pista"></span><span class="bolita"></span>
-            </label>
-            <span id="lblES">ES</span>
           </div>
         </div>
       </div>
@@ -788,6 +746,8 @@
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
   // Aplica el idioma a los textos estáticos (data-i18n) y refresca lo dinámico.
+  // La fuente de verdad del idioma es el <dotrino-topbar> (§9): persiste
+  // 'dotrino.lang' y avisa con el evento 'dotrino-lang'.
   function aplicarIdioma() {
     document.documentElement.lang = config.lang;
     document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -799,8 +759,6 @@
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
       el.title = t(el.dataset.i18nTitle);
     });
-    $('idioma').classList.toggle('es', config.lang === 'es');
-    $('cfgIdioma').checked = config.lang === 'es';
     actualizarDescModo();
     render();
   }
@@ -1044,9 +1002,9 @@
     });
   });
 
-  // Toggle de idioma ES ⟷ EN (se aplica al instante).
-  $('cfgIdioma').addEventListener('change', e => {
-    config.lang = e.target.checked ? 'es' : 'en';
+  // El toggle de idioma vive en <dotrino-topbar> (§9); escuchamos su evento.
+  document.querySelector('dotrino-topbar')?.addEventListener('dotrino-lang', e => {
+    config.lang = e.detail.lang;
     guardarConfig();
     aplicarIdioma();
     if ($('modalResultados').classList.contains('abierto')) pintarResultados();
@@ -1055,6 +1013,10 @@
   // --- Arranque ---
   leerConfig();
   cargarActual();
+  // Fuente de verdad del idioma: <dotrino-topbar> (§9) resuelve localStorage del
+  // ecosistema o navegador y setea document.documentElement.lang.
+  const topbarLang = document.documentElement.lang;
+  if (topbarLang === 'es' || topbarLang === 'en') config.lang = topbarLang;
   aplicarIdioma();
 
   // --- PWA: service worker + botón Instalar ---
@@ -1089,7 +1051,6 @@
     deferredPrompt = null;
   });
 </script>
-  <script type="module" src="https://cdn.jsdelivr.net/npm/@dotrino/support@0.4/src/index.js"></script>
   <!-- Navegación "volver" unificada del ecosistema: chevron del header + botón
        físico de Android / gesto de iOS / atrás del navegador → cierra los modales
        (resultados / opciones); si no hay nada → dotrino.com. -->
