@@ -188,17 +188,20 @@
   .meta-row {
     display: flex;
     align-items: center;
-    gap: 1.2vw;
+    gap: .8vw;
   }
   .meta-row .lbl {
     display: inline-block;
-    min-width: 11vw;
+    min-width: 9vw;
     text-align: left;
   }
   /* Jerarquía: el SET es la unidad mayor, así que va más grande que el GAME
      (antes los dos medían igual y no se distinguía cuál mandaba). */
+  /* El total del partido (x/3, x/5) va más chico: el número que cuenta es el
+     de sets ganados, el otro es la referencia. */
+  .meta-row .tot { font-size: .5em; opacity: .7; }
   .meta-row.r-sets .n   { font-size: 4vh; }
-  .meta-row.r-sets .lbl { font-size: 2.1vh; }
+  .meta-row.r-sets .lbl { font-size: 1.9vh; }
   .meta-row.r-games .n   { font-size: 2.4vh; opacity: .9; }
   .meta-row.r-games .lbl { font-size: 1.5vh; opacity: .9; }
   /* Botones +/− de ajuste. En táctil hay que poder darles con el pulgar: el
@@ -569,6 +572,17 @@
       <div class="modal-body">
         <div class="opcion">
           <div class="opcion-info">
+            <div class="opcion-label" data-i18n="matchSets">Match sets</div>
+            <div class="opcion-desc" id="setsDesc"></div>
+          </div>
+          <div class="seg" id="nsets" role="group" aria-label="Match sets">
+            <button type="button" class="seg-btn" data-sets="1">1</button>
+            <button type="button" class="seg-btn" data-sets="3">3</button>
+            <button type="button" class="seg-btn" data-sets="5">5</button>
+          </div>
+        </div>
+        <div class="opcion">
+          <div class="opcion-info">
             <div class="opcion-label" data-i18n="scoringMode">Scoring mode</div>
             <div class="opcion-desc" id="scoringDesc"></div>
           </div>
@@ -594,6 +608,10 @@
   // Point FIP: 2 ventajas y luego punto de oro) | 'oro' (punto de oro directo).
   const config = {
     scoring: 'oro',
+    // Sets del partido: 1, 3 o 5. Solo cambia cómo se lee el marcador (x/3,
+    // x/5); a 1 set la fila de sets sobra y no se pinta. El partido lo sigue
+    // cerrando el botón Nuevo, no un límite.
+    sets: 3,
     lang: (navigator.language || 'en').toLowerCase().startsWith('es') ? 'es' : 'en'
   };
 
@@ -609,7 +627,11 @@
       desc_oro: 'At 40-40 the next point decides the game (sudden death).',
       language: 'Language',
       serve: 'SERVE', confirmNew: 'Start a new match? The current score will be saved.',
-      noResults: 'No saved results.', delete: 'Delete', point: 'point'
+      noResults: 'No saved results.', delete: 'Delete', point: 'point',
+      matchSets: 'Match sets',
+      desc_sets1: 'Endless count: games add up with no set to close and no tie-break. The set counter is hidden.',
+      desc_sets3: 'Best of 3: the score reads x/3.',
+      desc_sets5: 'Best of 5: the score reads x/5.'
     },
     es: {
       results: '📋 Resultados', install: '⬇ Instalar', optionsTitle: 'Opciones',
@@ -621,7 +643,11 @@
       desc_oro: 'En 40-40 el siguiente punto define el juego (muerte súbita).',
       language: 'Idioma',
       serve: 'SAQUE', confirmNew: '¿Empezar un partido nuevo? El marcador actual se guardará.',
-      noResults: 'No hay resultados guardados.', delete: 'Borrar', point: 'punto'
+      noResults: 'No hay resultados guardados.', delete: 'Borrar', point: 'punto',
+      matchSets: 'Sets del partido',
+      desc_sets1: 'Cuenta sin fin: los juegos se acumulan, no se cierra ningún set y no hay tie-break. El contador de sets no se muestra.',
+      desc_sets3: 'Al mejor de 3: el marcador se lee x/3.',
+      desc_sets5: 'Al mejor de 5: el marcador se lee x/5.'
     }
   };
   const t = k => (I18N[config.lang] || I18N.en)[k];
@@ -647,6 +673,7 @@
       const c = JSON.parse(localStorage.getItem(CONFIG_KEY));
       if (c && ['ventaja', 'doble', 'oro'].includes(c.scoring)) config.scoring = c.scoring;
       else if (c && typeof c.puntoOro === 'boolean') config.scoring = c.puntoOro ? 'oro' : 'ventaja';
+      if (c && [1, 3, 5].includes(c.sets)) config.sets = c.sets;
       if (c && (c.lang === 'es' || c.lang === 'en')) config.lang = c.lang;
     } catch {}
   }
@@ -733,6 +760,10 @@
     estado.izq.p = 0; estado.der.p = 0;
     estado.gameNum++;
     flipSaque(); // el saque cambia de pareja en cada juego
+    // A 1 set el contador es SIN FIN: los juegos se acumulan y no se cierra
+    // set ni se entra en tie-break. Es el contador pelado, para jugar los
+    // juegos que dé la cancha.
+    if (config.sets === 1) return;
     if (estado[lado].j >= 6 && estado[lado].j - estado[o].j >= 2) {
       cerrarSet(lado, false);
     } else if (estado.izq.j === 6 && estado.der.j === 6) {
@@ -756,7 +787,7 @@
     if (nuevo < 0) return;
     guardar();
     estado[lado][tipo] = nuevo;
-    if (tipo === 'j') estado.tiebreak = (estado.izq.j === 6 && estado.der.j === 6);
+    if (tipo === 'j') estado.tiebreak = config.sets > 1 && estado.izq.j === 6 && estado.der.j === 6;
     render();
   }
 
@@ -800,16 +831,21 @@
       pts.classList.toggle('ad', d.ad);
       // El SET va en una fila más grande que el GAME: es la unidad mayor y
       // tiene que verse cuál manda de un vistazo (clases .r-sets / .r-games).
-      const fila = (tipo, clase, valor, etiqueta) =>
+      const fila = (tipo, clase, valor, etiqueta, total) =>
         `<div class="meta-row ${clase}">` +
           `<button class="aj" data-lado="${lado}" data-tipo="${tipo}" data-delta="-1"` +
             `${valor > 0 ? '' : ' disabled'} aria-label="−1 ${etiqueta}">−</button>` +
-          `<span class="n">${valor}</span><span class="lbl">${etiqueta}</span>` +
+          `<span class="n">${valor}${total ? `<span class="tot">/${total}</span>` : ''}</span>` +
+          `<span class="lbl">${etiqueta}</span>` +
           `<button class="aj" data-lado="${lado}" data-tipo="${tipo}" data-delta="1" aria-label="+1 ${etiqueta}">+</button>` +
         `</div>`;
+      // A 1 set la fila de sets no dice nada (el partido se define en ese set),
+      // así que se oculta; con 3 o 5 el marcador se lee x/3, x/5. Si quedó un
+      // set ganado de antes, la fila se queda para poder corregirlo.
+      const verSets = config.sets > 1 || estado[lado].s > 0 || estado[otro(lado)].s > 0;
       $('meta' + cap(lado)).innerHTML =
-        fila('s', 'r-sets', estado[lado].s, 'sets') +
-        fila('j', 'r-games', estado[lado].j, 'games');
+        (verSets ? fila('s', 'r-sets', estado[lado].s, 'sets', config.sets > 1 ? config.sets : 0) : '') +
+        fila('j', 'r-games', estado[lado].j, 'games', 0);
       // Ajuste fino del punto, debajo del marcador grande.
       const btnPunto = delta =>
         `<button class="aj aj-pts" data-lado="${lado}" data-tipo="p" data-delta="${delta}"` +
@@ -825,6 +861,8 @@
     $('saque').innerHTML = canchaSaque(estado.saque, ladoSaque);
     document.querySelectorAll('#modo .seg-btn').forEach(b =>
       b.classList.toggle('on', b.dataset.scoring === config.scoring));
+    document.querySelectorAll('#nsets .seg-btn').forEach(b =>
+      b.classList.toggle('on', Number(b.dataset.sets) === config.sets));
     guardarActual();
   }
 
@@ -851,6 +889,7 @@
   // Descripción del modo de puntuación elegido (cambia con el modo y el idioma).
   function actualizarDescModo() {
     $('scoringDesc').innerHTML = t('desc_' + config.scoring);
+    $('setsDesc').innerHTML = t('desc_sets' + config.sets);
   }
 
   // Mini cancha landscape (vista superior): red vertical en el centro, mitad
@@ -1076,6 +1115,19 @@
   $('btnCerrarOpciones').addEventListener('click', cerrarOpciones);
   $('modalOpciones').addEventListener('click', e => {
     if (e.target === $('modalOpciones')) cerrarOpciones();
+  });
+
+  // Sets del partido: 1 / 3 / 5 (se aplica al instante, sin tocar el marcador).
+  document.querySelectorAll('#nsets .seg-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      config.sets = Number(b.dataset.sets);
+      // El tie-break depende del modo: sin fin no lo hay, y al volver a 3/5
+      // un 6-6 en curso sí lo es.
+      estado.tiebreak = config.sets > 1 && estado.izq.j === 6 && estado.der.j === 6;
+      guardarConfig();
+      actualizarDescModo();
+      render();
+    });
   });
 
   // Modo de puntuación: ventaja / doble ventaja / punto de oro (se aplica al
