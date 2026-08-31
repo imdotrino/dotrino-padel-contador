@@ -1,4 +1,4 @@
-const CACHE = 'padel-v4';
+const CACHE = 'padel-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,22 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+
+  // Navegación (el HTML): network-first. Antes iba cache-first como todo lo
+  // demás y la app instalada se quedaba clavada en la versión vieja: un deploy
+  // no se veía nunca. Sin conexión cae a la copia cacheada.
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put('./index.html', copy)).catch(() => {});
+        return res;
+      }).catch(() => caches.match('./index.html').then(r => r || caches.match('./')))
+    );
+    return;
+  }
+
+  // Resto de assets: cache-first con refresco en segundo plano.
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {

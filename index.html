@@ -178,8 +178,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: .4vh;
-    font-size: 2vh;
+    gap: .2vh;
     font-weight: 700;
     letter-spacing: .04em;
     color: rgba(255,255,255,.85);
@@ -189,24 +188,33 @@
   .meta-row {
     display: flex;
     align-items: center;
-    gap: 1.6vw;
+    gap: 1.2vw;
   }
-  .meta .n { font-size: 2.6vh; }
   .meta-row .lbl {
     display: inline-block;
-    min-width: 13vw;
+    min-width: 11vw;
     text-align: left;
   }
+  /* Jerarquía: el SET es la unidad mayor, así que va más grande que el GAME
+     (antes los dos medían igual y no se distinguía cuál mandaba). */
+  .meta-row.r-sets .n   { font-size: 4vh; }
+  .meta-row.r-sets .lbl { font-size: 2.1vh; }
+  .meta-row.r-games .n   { font-size: 2.4vh; opacity: .9; }
+  .meta-row.r-games .lbl { font-size: 1.5vh; opacity: .9; }
+  /* Botones +/− de ajuste. En táctil hay que poder darles con el pulgar: el
+     área mínima cómoda es ~44 px, y antes medían 30. */
   .aj {
-    width: 6.5vw;
-    height: 6.5vw;
-    max-width: 30px;
-    max-height: 30px;
+    width: 11vw;
+    height: 11vw;
+    min-width: 44px;
+    min-height: 44px;
+    max-width: 52px;
+    max-height: 52px;
     border-radius: 50%;
     border: 1px solid rgba(255,255,255,.5);
     background: rgba(255,255,255,.14);
     color: #fff;
-    font-size: 3.6vw;
+    font-size: 4.4vw;
     font-weight: 800;
     line-height: 1;
     cursor: pointer;
@@ -217,14 +225,33 @@
     padding: 0;
   }
   .aj:active { background: rgba(255,255,255,.35); }
+  .aj[disabled] { opacity: .3; }
 
   .puntos {
-    font-size: 24vw;
+    font-size: 22vw;
     font-weight: 800;
     line-height: 1;
     font-variant-numeric: tabular-nums;
   }
   .puntos.ad { color: #fde047; }
+  /* Ajuste fino del punto: corregir sin tener que deshacer toda la jugada. */
+  .puntos-aj {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10vw;
+    margin-top: .6vh;
+  }
+  .aj-pts {
+    width: 15vw;
+    height: 15vw;
+    min-width: 54px;
+    min-height: 54px;
+    max-width: 66px;
+    max-height: 66px;
+    font-size: 6vw;
+    background: rgba(255,255,255,.18);
+  }
 
   .saque {
     position: absolute;
@@ -415,18 +442,45 @@
     line-height: 1.4;
   }
 
+  /* Pantallas bajas (móvil pequeño, o el navegador con sus barras a la vista):
+     la cancha del saque se encoge y baja para no taparse con el marcador y sus
+     botones de ajuste, que ahora ocupan una fila más. */
+  @media (max-height: 740px) {
+    .equipo { padding-bottom: 6vh; }
+    .puntos { font-size: 17vw; }
+    .puntos-aj { margin-top: .2vh; gap: 8vw; }
+    .aj-pts { min-width: 48px; min-height: 48px; }
+    .serv-lbl { margin-top: .2vh; }
+    .saque { bottom: 3vh; }
+    .saque svg { width: min(30vw, 17vh); }
+  }
+
   /* Solo en web (pantalla ancha + puntero fino): sets y games más grandes,
      y los botones +/- más pequeños. No afecta a móvil/táctil. */
   @media (min-width: 820px) and (pointer: fine) {
-    .meta { font-size: 3vh; gap: .8vh; }
-    .meta .n { font-size: 5.2vh; }
+    .meta { gap: .8vh; }
     .meta-row { gap: 1vw; }
+    .meta-row .lbl { min-width: 6vw; }
+    .meta-row.r-sets .n   { font-size: 7vh; }
+    .meta-row.r-sets .lbl { font-size: 3.2vh; }
+    .meta-row.r-games .n   { font-size: 4vh; }
+    .meta-row.r-games .lbl { font-size: 2.2vh; }
     .aj {
       width: 22px;
       height: 22px;
+      min-width: 22px;
+      min-height: 22px;
       font-size: 16px;
       border-width: 1px;
     }
+    .aj-pts {
+      width: 34px;
+      height: 34px;
+      min-width: 34px;
+      min-height: 34px;
+      font-size: 22px;
+    }
+    .puntos-aj { gap: 4vw; }
   }
 </style>
 <!-- Barra superior estándar del ecosistema (@dotrino/topbar, CONVENCIONES §5/§6.1).
@@ -470,6 +524,7 @@
       </div>
       <div class="meta" id="metaIzq"></div>
       <div class="puntos" id="ptsIzq">0</div>
+      <div class="puntos-aj" id="ptsAjIzq"></div>
       <div class="serv-lbl" id="servIzq"></div>
       <div class="tiebadge">TIE-BREAK</div>
       <div class="toque" id="toqueIzq">+1</div>
@@ -481,6 +536,7 @@
       </div>
       <div class="meta" id="metaDer"></div>
       <div class="puntos" id="ptsDer">0</div>
+      <div class="puntos-aj" id="ptsAjDer"></div>
       <div class="serv-lbl" id="servDer"></div>
       <div class="tiebadge">TIE-BREAK</div>
       <div class="toque" id="toqueDer">+1</div>
@@ -553,7 +609,7 @@
       desc_oro: 'At 40-40 the next point decides the game (sudden death).',
       language: 'Language',
       serve: 'SERVE', confirmNew: 'Start a new match? The current score will be saved.',
-      noResults: 'No saved results.', delete: 'Delete'
+      noResults: 'No saved results.', delete: 'Delete', point: 'point'
     },
     es: {
       results: '📋 Resultados', install: '⬇ Instalar', optionsTitle: 'Opciones',
@@ -565,7 +621,7 @@
       desc_oro: 'En 40-40 el siguiente punto define el juego (muerte súbita).',
       language: 'Idioma',
       serve: 'SAQUE', confirmNew: '¿Empezar un partido nuevo? El marcador actual se guardará.',
-      noResults: 'No hay resultados guardados.', delete: 'Borrar'
+      noResults: 'No hay resultados guardados.', delete: 'Borrar', point: 'punto'
     }
   };
   const t = k => (I18N[config.lang] || I18N.en)[k];
@@ -638,27 +694,34 @@
   }
 
   // --- Lógica de puntuación ---
+  // Puntos de diferencia para cerrar el juego según el modo:
+  //  · 'oro'    → 1: en 40-40 el siguiente punto define (muerte súbita).
+  //  · 'ventaja'→ 2: hay que ganar por dos (la igualdad se repite sin fin).
+  //  · 'doble'  → 2, pero a la 3ª igualdad (ambos en 5 = se gastaron las dos
+  //               ventajas) pasa a punto de oro = 1. Es el "Star Point" FIP.
+  function diffNecesaria(a, b) {
+    if (config.scoring === 'oro') return 1;
+    if (config.scoring === 'doble' && Math.min(a, b) >= 5) return 1;
+    return 2;
+  }
+  // ¿El marcador a-b ya cierra el juego (o el tie-break) a favor del primero?
+  function cierra(a, b) {
+    if (estado.tiebreak) return a >= 7 && a - b >= 2;
+    return a >= 4 && a - b >= diffNecesaria(a, b);
+  }
+
   function ganarPunto(lado) {
     guardar();
     const o = otro(lado);
     const A = estado[lado], B = estado[o];
 
+    A.p++;
     if (estado.tiebreak) {
-      A.p++;
       // El saque pasa tras el 1er punto y luego cada 2 puntos.
       if ((estado.izq.p + estado.der.p) % 2 === 1) flipSaque();
-      if (A.p >= 7 && A.p - B.p >= 2) cerrarSet(lado, true);
-    } else {
-      A.p++;
-      // Puntos de diferencia para cerrar el juego según el modo:
-      //  · 'oro'    → 1: en 40-40 el siguiente punto define (muerte súbita).
-      //  · 'ventaja'→ 2: hay que ganar por dos (la igualdad se repite sin fin).
-      //  · 'doble'  → 2, pero a la 3ª igualdad (ambos en 5 = se gastaron las dos
-      //               ventajas) pasa a punto de oro = 1. Es el "Star Point" FIP.
-      let need = 2;
-      if (config.scoring === 'oro') need = 1;
-      else if (config.scoring === 'doble' && Math.min(A.p, B.p) >= 5) need = 1;
-      if (A.p >= 4 && A.p - B.p >= need) ganarJuego(lado);
+      if (cierra(A.p, B.p)) cerrarSet(lado, true);
+    } else if (cierra(A.p, B.p)) {
+      ganarJuego(lado);
     }
     animarToque(lado);
     render();
@@ -697,6 +760,21 @@
     render();
   }
 
+  // Ajuste fino del punto (+/−): corrige el juego en curso sin tener que
+  // deshacer jugadas. Nunca cierra el juego ni el set — para eso está tocar el
+  // panel —, así que se rechaza el ajuste que dejaría un juego ya ganado (y de
+  // paso eso mantiene el marcador dentro de 0/15/30/40/AD).
+  function puedeAjustarPunto(lado, delta) {
+    const a = estado[lado].p + delta, b = estado[otro(lado)].p;
+    return a >= 0 && !cierra(a, b) && !cierra(b, a);
+  }
+  function ajustarPunto(lado, delta) {
+    if (!puedeAjustarPunto(lado, delta)) return;
+    guardar();
+    estado[lado].p += delta;
+    render();
+  }
+
   function dispPunto(lado) {
     const o = otro(lado);
     const a = estado[lado].p, b = estado[o].p;
@@ -720,17 +798,24 @@
       const pts = $('pts' + cap(lado));
       pts.textContent = d.txt;
       pts.classList.toggle('ad', d.ad);
-      $('meta' + cap(lado)).innerHTML =
-        `<div class="meta-row">` +
-          `<button class="aj" data-lado="${lado}" data-tipo="s" data-delta="-1">−</button>` +
-          `<span class="n">${estado[lado].s}</span><span class="lbl">sets</span>` +
-          `<button class="aj" data-lado="${lado}" data-tipo="s" data-delta="1">+</button>` +
-        `</div>` +
-        `<div class="meta-row">` +
-          `<button class="aj" data-lado="${lado}" data-tipo="j" data-delta="-1">−</button>` +
-          `<span class="n">${estado[lado].j}</span><span class="lbl">games</span>` +
-          `<button class="aj" data-lado="${lado}" data-tipo="j" data-delta="1">+</button>` +
+      // El SET va en una fila más grande que el GAME: es la unidad mayor y
+      // tiene que verse cuál manda de un vistazo (clases .r-sets / .r-games).
+      const fila = (tipo, clase, valor, etiqueta) =>
+        `<div class="meta-row ${clase}">` +
+          `<button class="aj" data-lado="${lado}" data-tipo="${tipo}" data-delta="-1"` +
+            `${valor > 0 ? '' : ' disabled'} aria-label="−1 ${etiqueta}">−</button>` +
+          `<span class="n">${valor}</span><span class="lbl">${etiqueta}</span>` +
+          `<button class="aj" data-lado="${lado}" data-tipo="${tipo}" data-delta="1" aria-label="+1 ${etiqueta}">+</button>` +
         `</div>`;
+      $('meta' + cap(lado)).innerHTML =
+        fila('s', 'r-sets', estado[lado].s, 'sets') +
+        fila('j', 'r-games', estado[lado].j, 'games');
+      // Ajuste fino del punto, debajo del marcador grande.
+      const btnPunto = delta =>
+        `<button class="aj aj-pts" data-lado="${lado}" data-tipo="p" data-delta="${delta}"` +
+          `${puedeAjustarPunto(lado, delta) ? '' : ' disabled'}` +
+          ` aria-label="${delta > 0 ? '+1' : '−1'} ${t('point')}">${delta > 0 ? '+' : '−'}</button>`;
+      $('ptsAj' + cap(lado)).innerHTML = btnPunto(-1) + btnPunto(1);
       const activo = estado.saque === lado;
       $('eq' + cap(lado)).classList.toggle('activo', activo);
       // Etiqueta "SERVE Pn" debajo del puntaje del equipo que saca.
@@ -942,12 +1027,14 @@
   $('eqIzq').addEventListener('click', tocarPanel('izq'));
   $('eqDer').addEventListener('click', tocarPanel('der'));
 
-  // Botones +/− de sets y games (delegado: se recrean en cada render).
+  // Botones +/− de punto, sets y games (delegado: se recrean en cada render).
   document.querySelector('.marcador').addEventListener('click', e => {
     const b = e.target.closest('.aj');
     if (!b) return;
     e.stopPropagation();
-    ajustar(b.dataset.lado, b.dataset.tipo, Number(b.dataset.delta));
+    const delta = Number(b.dataset.delta);
+    if (b.dataset.tipo === 'p') ajustarPunto(b.dataset.lado, delta);
+    else ajustar(b.dataset.lado, b.dataset.tipo, delta);
   });
 
   document.querySelectorAll('.edit-nombre').forEach(b => {
