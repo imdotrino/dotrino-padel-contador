@@ -1,7 +1,8 @@
 {
-  "name": "Padel Scoreboard",
+  "name": "Padel — scoreboard and tournaments",
   "short_name": "Padel",
-  "description": "Simple scoreboard for padel matches",
+  "description": "Padel scoreboard and tournaments with rotating or fixed partners",
+  "launch_handler": { "client_mode": "focus-existing" },
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

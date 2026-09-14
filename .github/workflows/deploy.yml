@@ -1,3 +1,4 @@
+# Deploy a GitHub Pages (build de Vite → dist/). Estándar del ecosistema (§11.3).
 name: Deploy to GitHub Pages
 
 on:
@@ -22,13 +23,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inyectar meta de commit
-        run: |
-          COMMIT=${GITHUB_SHA::7}
-          sed -i "s|</head>|  <meta name=\"commit\" content=\"$COMMIT\" />\\n</head>|" index.html
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm install
+      # Las pruebas del motor del torneo van antes del build: nada roto llega a publicarse.
+      - run: npm test
+      - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: ./dist
       - id: deployment
         uses: actions/deploy-pages@v4
