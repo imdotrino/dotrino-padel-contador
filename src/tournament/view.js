@@ -23,7 +23,7 @@ let ruleForm = null // { source, baseId, name, settings }: el formulario de abaj
 const RANGES = { courts: [1, 20], limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
 const STEPS = { matchMinutes: 5 }
 const LABELS = { name: 'name', rulesetName: 'rulesetName', partners: 'partners', pairing: 'pairing', courts: 'courts', limit: 'limit', scoring: 'scoring', matchEnd: 'matchEnd' }
-const INFOS = new Set(['partners', 'pairing', 'limit', 'scoring', 'matchEnd'])
+const INFOS = new Set(['partners', 'pairing', 'courts', 'limit', 'scoring', 'matchEnd'])
 const PARTNER_LABELS = { rotating: 'partnersRotating', fixed: 'partnersFixed' }
 const PAIRING_LABELS = { random: 'pairingRandom', ranked: 'pairingRanked' }
 
@@ -495,10 +495,29 @@ function matchEndSummary (s) {
 // se juega en las que caben: se marca en rojo y se dice. '' si no sobran. Con menos de
 // una cancha llena no se avisa aquí: ya lo dice «Empezar».
 function courtsOver (tour, s) {
+  if (s.courtsMode === 'auto') return '' // en «Auto» salen justo las que caben
   const probe = { ...tour, settings: s }
   const max = engine.maxCourts(probe)
   if (max < 1 || s.courts <= max) return ''
   return tn(engine.isFixed(probe) ? 'courtsOverTeams' : 'courtsOverPlayers', max, { units: engine.activeUnits(probe).length, n: max })
+}
+
+// Las canchas en una frase: «Auto · jugadores/4 · 2 canchas», o «3 canchas» si son fijas.
+function courtsSummary (tour, s) {
+  if (s.courtsMode !== 'auto') return tn('courtsCount', s.courts)
+  const probe = { ...tour, settings: s }
+  const max = engine.maxCourts(probe)
+  const base = t(engine.isFixed(probe) ? 'courtsAutoTeams' : 'courtsAutoPlayers')
+  return max >= 1 ? `${base} · ${tn('courtsCount', max)}` : base
+}
+
+// «Auto» o «Fijo». En «Auto» el contador se ve deshabilitado con las canchas que salen.
+function courtsEditor (tour, s) {
+  const auto = s.courtsMode === 'auto'
+  const max = engine.maxCourts({ ...tour, settings: s })
+  const value = auto ? max : s.courts
+  return seg('courtsMode', [['auto', 'courtsModeAuto'], ['fixed', 'courtsModeFixed']], s.courtsMode) +
+    `<div class="row">${stepper('courts', value, auto && max < 1 ? '—' : String(value), undefined, undefined, auto)}<span class="unit">${esc(tn('unit_courts', value))}</span></div>`
 }
 
 // «≈ 7 partidos · 4 rondas · 80 min» con estas reglas y los jugadores de este torneo.
@@ -577,7 +596,7 @@ function rulesChips (tour, s) {
   return [
     [t('partnersSummary_' + s.partners)],
     [t('pairingSummary_' + s.pairing)],
-    [tn('courtsCount', s.courts), over],
+    [courtsSummary(tour, s), over],
     [limitSummary(tour, s)],
     [scoringSummary(s)],
     [matchEndSummary(s)]
@@ -669,7 +688,7 @@ function rulesFormHtml (tour) {
         maxlength="40" autocomplete="off" value="${esc(f.name)}" aria-label="${esc(t('rulesetName'))}" data-testid="ruleset-name">`)}
     ${rule('partners', t(PARTNER_LABELS[s.partners]), () => seg('partners', [['rotating', 'partnersRotating'], ['fixed', 'partnersFixed']], s.partners))}
     ${rule('pairing', t(PAIRING_LABELS[s.pairing]), () => seg('pairing', [['random', 'pairingRandom'], ['ranked', 'pairingRanked']], s.pairing), clash('pairing'))}
-    ${rule('courts', tn('courtsCount', s.courts), () => stepper('courts', s.courts, String(s.courts)), { note: over, warn: Boolean(over) })}
+    ${rule('courts', courtsSummary(tour, s), () => courtsEditor(tour, s), { note: over, warn: Boolean(over) })}
     ${rule('limit', `${limitSummary(tour, s)}${est ? ' · ' + est : ''}`, () => limitEditor(tour, s, est), clash('limit'))}
     ${rule('scoring', scoringSummary(s), () => scoringBody(s))}
     ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}

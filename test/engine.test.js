@@ -5,7 +5,7 @@ import {
   setScore, nextRoundBlocker, redoLastRound, setPartners, removePlayer, removeTeam,
   appearances, hasResults, defaultSettings, SCORE_KINDS, setSets, outcome, toggleScoring,
   clockOf, startClock, pauseClock, resumeClock, resetClock, formatClock, migrateTournament,
-  maxCourts, courtsInUse, builtinRulesets, applyRules, canApplyRules, checkSettings,
+  maxCourts, courtsInUse, builtinRulesets, applyRules, canApplyRules, checkSettings, migrateSettings,
   settingsConflicts, everyoneMatchesEach
 } from '../src/tournament/engine.js'
 
@@ -22,7 +22,8 @@ function seeded (seed) {
 }
 
 function withPlayers (n, settings) {
-  const t = createTournament({ name: 'test', settings })
+  // Estas pruebas ponen las canchas a mano: número fijo, salvo que digan otra cosa.
+  const t = createTournament({ name: 'test', settings: { courtsMode: 'fixed', ...settings } })
   for (let i = 0; i < n; i++) addPlayer(t, 'P' + i)
   return t
 }
@@ -477,4 +478,34 @@ test('everyone and ranked do not combine', () => {
   assert.equal(defaultSettings().limitType, 'everyone')
   assert.deepEqual(settingsConflicts(defaultSettings()), [])
   assert.deepEqual(settingsConflicts({ ...defaultSettings(), pairing: 'ranked', limitType: 'perPlayer' }), [])
+})
+
+// ---------- canchas: auto o fijas ----------
+
+test('courts: auto (the default) uses players / 4, or pairs / 2, and grows with players', () => {
+  assert.equal(defaultSettings().courtsMode, 'auto')
+  const t = withPlayers(9, { courtsMode: 'auto', courts: 1 })
+  assert.equal(courtsInUse(t), 2, 'auto ignores the number set')
+  for (let i = 0; i < 3; i++) addPlayer(t, 'X' + i)
+  assert.equal(courtsInUse(t), 3, 'more players, more courts')
+  t.settings.limitType = 'rounds'
+  t.settings.limitValue = 2
+  assert.deepEqual(estimate(t), { matches: 6, rounds: 2, exact: true })
+  assert.equal(generateRound(t, seeded(1)).matches.length, 3)
+
+  const teams = createTournament({ settings: { partners: 'fixed', courtsMode: 'auto' } })
+  for (let i = 0; i < 6; i++) addTeam(teams, 'A' + i, 'B' + i)
+  assert.equal(courtsInUse(teams), 3)
+
+  const fixed = withPlayers(12, { courtsMode: 'fixed', courts: 2 })
+  assert.equal(courtsInUse(fixed), 2, 'fixed keeps the club courts')
+  assert.throws(() => checkSettings({ ...defaultSettings(), courtsMode: 'sometimes' }), /unknown courts mode/)
+})
+
+test('settings saved before auto courts keep their fixed number', () => {
+  const old = { ...defaultSettings(), courts: 3 }
+  delete old.courtsMode
+  migrateSettings(old)
+  assert.equal(old.courtsMode, 'fixed')
+  assert.equal(old.courts, 3)
 })

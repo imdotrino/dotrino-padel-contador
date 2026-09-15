@@ -3,7 +3,7 @@
 // guardar agrupa los cambios seguidos (escribir un marcador dígito a dígito) en una
 // sola escritura.
 import { listDocs, putDoc, removeDoc } from '../storage.js'
-import { migrateTournament, checkSettings } from './engine.js'
+import { migrateTournament, migrateSettings, checkSettings } from './engine.js'
 
 const THREAD = 'padel.tournaments'
 const META_THREAD = 'padel.meta'
@@ -32,7 +32,7 @@ export async function load () {
   state.error = null
   try {
     const [docs, meta, rulesets] = await Promise.all([listDocs(THREAD), listDocs(META_THREAD), listDocs(RULES_THREAD)])
-    for (const r of rulesets) checkSettings(r.settings)
+    for (const r of rulesets) migrateSettings(r.settings)
     state.rulesets = rulesets
     state.list = docs.map(migrateTournament)
     const activeId = meta.length ? meta[meta.length - 1].activeId : null

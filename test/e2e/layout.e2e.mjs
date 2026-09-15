@@ -18,11 +18,14 @@ after(async () => { await browser?.close() })
 // Un torneo con dos rondas (la primera con resultados) y el marcador en 40–AD.
 async function seed (page) {
   await newTournament(page, PLAYERS)
-  // 9 jugadores llenan 2 canchas: se pueden poner 3, pero la regla va en rojo y dice
-  // que se juega en 2.
+  // Canchas en «Auto» por defecto: 9 jugadores / 4 = 2, sin tocar nada. En «Fijo» se pueden
+  // poner 3, pero la regla va en rojo y dice que se juega en 2.
   const courts = page.locator('[data-testid="rule-courts"]')
+  assert.equal(await page.textContent('[data-testid="rule-courts-text"]'), 'Auto · jugadores/4 · 2 canchas')
   await page.click('[data-testid="edit-courts"]')
   assert.equal(await courts.getAttribute('class'), 'rule open')
+  assert.equal(await page.isDisabled('[data-testid="courts-plus"]'), true, 'in auto the number is not set by hand')
+  await page.click('[data-testid="courtsMode-fixed"]')
   await page.click('[data-testid="courts-plus"]')
   assert.equal(await page.textContent('[data-testid="rule-courts-text"]'), '3 canchas')
   assert.match(await courts.getAttribute('class'), /\bwarn\b/)

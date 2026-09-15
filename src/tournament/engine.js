@@ -28,6 +28,7 @@ const PAIRINGS = ['random', 'ranked']
 // una vez con cada uno de los demás (con todos).
 const LIMITS = ['perPlayer', 'rounds', 'matches', 'everyone']
 const MATCH_ENDS = ['time', 'games']
+const COURTS_MODES = ['auto', 'fixed']
 export const SCORE_KINDS = ['games', 'sets', 'match']
 const MINUTE = 60000
 
@@ -37,6 +38,9 @@ export function defaultSettings () {
   return {
     partners: 'rotating',
     pairing: 'random',
+    // Canchas: 'auto' (por defecto, dueño 2026-09-15) = una por cada 4 jugadores (2 parejas);
+    // 'fixed' = las de `courts`, las que tiene el club.
+    courtsMode: 'auto',
     courts: 2,
     // Por defecto «con todos» («todos contra todos» si las parejas son fijas): sale del
     // número de jugadores (dueño, 2026-09-15). `limitValue` queda para cuando se elija otra.
@@ -71,6 +75,7 @@ export function checkSettings (s) {
   if (!PARTNERS.includes(s.partners)) throw new Error(`unknown partners mode: ${s.partners}`)
   if (!PAIRINGS.includes(s.pairing)) throw new Error(`unknown pairing mode: ${s.pairing}`)
   if (!LIMITS.includes(s.limitType)) throw new Error(`unknown limit type: ${s.limitType}`)
+  if (!COURTS_MODES.includes(s.courtsMode)) throw new Error(`unknown courts mode: ${s.courtsMode}`)
   if (!Number.isInteger(s.courts) || s.courts < 1) throw new Error(`invalid courts: ${s.courts}`)
   if (!Number.isInteger(s.limitValue) || s.limitValue < 1) throw new Error(`invalid limit: ${s.limitValue}`)
   for (const k of SCORE_KINDS) {
@@ -146,10 +151,14 @@ export function activeUnits (t) {
 // Canchas que caben: cuatro jugadores por cancha (dos parejas si son fijas).
 export const maxCourts = t => Math.floor(activeUnits(t).length / slotsPerMatch(t))
 
-// Las canchas que se usan: las que hay (`settings.courts`), nunca más de las que caben, y
-// al menos una. El ajuste guarda las que tiene el club; si faltan jugadores se usan menos,
-// y si vuelven, vuelven a caber.
-export const courtsInUse = t => Math.max(1, Math.min(t.settings.courts, maxCourts(t)))
+// Las canchas que salen, y pueden ser cero si no se llena ninguna. En «auto», las que caben
+// (jugadores/4, parejas/2): más jugadores, más canchas. En «fixed», las que tiene el club
+// (`settings.courts`), nunca más de las que caben; si faltan jugadores se usan menos, y si
+// vuelven, vuelven a caber.
+const courtsFor = t => (t.settings.courtsMode === 'auto' ? maxCourts(t) : Math.min(t.settings.courts, maxCourts(t)))
+
+// Las canchas que se usan al armar una ronda: las que salen, y al menos una.
+export const courtsInUse = t => Math.max(1, courtsFor(t))
 
 export const hasScore = m =>
   m.score != null && Number.isInteger(m.score.a) && Number.isInteger(m.score.b)
@@ -270,7 +279,7 @@ export function status (t) {
 export function estimate (t) {
   const units = activeUnits(t)
   const slots = slotsPerMatch(t)
-  const courts = Math.min(t.settings.courts, Math.floor(units.length / slots))
+  const courts = courtsFor(t)
   if (courts < 1) return null
   const { limitType, limitValue } = t.settings
   const done = countMatches(t)
@@ -773,8 +782,9 @@ export function formatClock (ms) {
 // 'match'` y no traen `matchEnd`, `matchMinutes`, `sets` ni `clock`. Se convierten a lo
 // que ya hacían: terminaban por juegos y puntuaban por juego (1) o por partido (3). Lo
 // que no cuadre lo para `checkSettings`. Cubierta por test.
-export function migrateTournament (t) {
-  const s = t.settings
+// Ajustes guardados antes de que existiera alguno de sus campos (en un torneo o en un set de
+// reglas). Lo que se añade conserva el comportamiento que tenían al guardarse.
+export function migrateSettings (s) {
   if (typeof s.scoring === 'string') {
     const was = s.scoring
     s.scoring = {
@@ -785,11 +795,19 @@ export function migrateTournament (t) {
   }
   if (s.matchEnd === undefined) s.matchEnd = 'games'
   if (s.matchMinutes === undefined) s.matchMinutes = defaultSettings().matchMinutes
+  // Migración del 2026-09-15: antes de «auto» las canchas eran siempre un número fijo, y lo
+  // guardado lo sigue siendo. Se puede quitar cuando no queden datos de antes de esa fecha.
+  if (s.courtsMode === undefined) s.courtsMode = 'fixed'
+  checkSettings(s)
+  return s
+}
+
+export function migrateTournament (t) {
+  migrateSettings(t.settings)
   if (t.rulesetId === undefined) t.rulesetId = null
   for (const r of t.rounds) {
     if (r.clock === undefined) r.clock = null
     for (const m of r.matches) if (m.sets === undefined) m.sets = null
   }
-  checkSettings(s)
   return t
 }

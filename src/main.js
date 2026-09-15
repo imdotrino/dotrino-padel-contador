@@ -14,6 +14,7 @@ import * as scoreboard from './scoreboard.js'
 import * as tournament from './tournament/view.js'
 import * as repo from './tournament/repo.js'
 import * as live from './tournament/live.js'
+import { migrateTournament } from './tournament/engine.js'
 import { getIdentity } from './services/identity.js'
 import { getReputation } from './services/reputation.js'
 
@@ -133,9 +134,12 @@ if (viewer) {
   setTab('matches')
   if (watchRef) {
     live.watch(watchRef).then(broadcast => {
-      watching.state = broadcast.state
+      // Lo que llega se migra como lo que se carga del almacén: el organizador puede tener
+      // una versión anterior de la app.
+      const received = state => (state ? migrateTournament(structuredClone(state)) : null)
+      watching.state = received(broadcast.state)
       watching.status = broadcast.status
-      broadcast.on('state', state => { watching.state = state; tournament.renderAll() })
+      broadcast.on('state', state => { watching.state = received(state); tournament.renderAll() })
       broadcast.on('status', ({ status, reason }) => { watching.status = status; watching.reason = reason; tournament.renderAll() })
       tournament.renderAll()
     }).catch(e => {
