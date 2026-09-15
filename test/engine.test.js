@@ -6,7 +6,7 @@ import {
   appearances, hasResults, defaultSettings, SCORE_KINDS, setSets, outcome, toggleScoring,
   clockOf, startClock, pauseClock, resumeClock, resetClock, formatClock, migrateTournament,
   maxCourts, courtsInUse, builtinRulesets, applyRules, canApplyRules, checkSettings, migrateSettings,
-  settingsConflicts, everyoneMatchesEach
+  settingsConflicts, everyoneMatchesEach, periodStart, HISTORY_PERIODS
 } from '../src/tournament/engine.js'
 
 // Azar con semilla, para que un fallo se pueda repetir.
@@ -508,4 +508,18 @@ test('MIGRACIÓN (se quita el 2026-10-15): settings saved before auto courts kee
   migrateSettings(old)
   assert.equal(old.courtsMode, 'fixed')
   assert.equal(old.courts, 3)
+})
+
+test('periodStart: today from midnight, the week from Monday, the month from the 1st, all without limit', () => {
+  const day = (m, d, h = 0, min = 0) => new Date(2026, m - 1, d, h, min).getTime()
+  const wednesday = day(9, 16, 18, 30)
+  assert.deepEqual(HISTORY_PERIODS, ['all', 'month', 'week', 'today'])
+  assert.equal(periodStart('today', wednesday), day(9, 16))
+  assert.equal(periodStart('week', wednesday), day(9, 14))
+  assert.equal(periodStart('week', day(9, 14, 0, 5)), day(9, 14), 'Monday opens its own week')
+  assert.equal(periodStart('week', day(9, 20, 23)), day(9, 14), 'Sunday closes the week that began on Monday')
+  assert.equal(periodStart('week', day(10, 1, 12)), day(9, 28), 'a week can begin in the previous month')
+  assert.equal(periodStart('month', wednesday), day(9, 1))
+  assert.equal(periodStart('all', wednesday), -Infinity)
+  assert.throws(() => periodStart('year', wednesday), /unknown period: year/)
 })

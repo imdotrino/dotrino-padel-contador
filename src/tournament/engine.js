@@ -108,6 +108,20 @@ export function builtinRulesets () {
   return [{ id: 'builtin-default', builtin: true, name: 'Default', settings: defaultSettings() }]
 }
 
+// El filtro de «Mis torneos», por cuándo se creó cada torneo. Periodos de calendario en la
+// hora local: hoy desde las 0:00, la semana desde el lunes, el mes desde el día 1.
+export const HISTORY_PERIODS = ['all', 'month', 'week', 'today']
+
+export function periodStart (period, now = Date.now()) {
+  if (period === 'all') return -Infinity
+  const day = new Date(now)
+  day.setHours(0, 0, 0, 0)
+  if (period === 'today') return day.getTime()
+  if (period === 'week') return day.setDate(day.getDate() - (day.getDay() + 6) % 7)
+  if (period === 'month') return day.setDate(1)
+  throw new Error(`unknown period: ${period}`)
+}
+
 // rulesetId: de qué set salieron las reglas (null si no salieron de ninguno).
 export function createTournament ({ name = '', settings = {}, players = [], teams = [], rulesetId = null } = {}) {
   const now = Date.now()

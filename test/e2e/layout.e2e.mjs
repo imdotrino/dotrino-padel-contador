@@ -150,10 +150,13 @@ test('móvil: el marcador no se encima y el torneo va en una columna', async t =
   }
 })
 
-test('Mis torneos: arriba de todo, el más nuevo primero aunque se juegue en uno viejo, y elegir uno se queda en Torneo', async () => {
-  const { ctx, page, errors } = await openApp(browser, { width: 390, height: 844, mobile: true })
+test('Mis torneos: arriba de todo, filtrado por periodo (hoy por defecto), el más nuevo primero aunque se juegue en uno viejo, y elegir uno se queda en Torneo', async () => {
+  // Reloj controlado: cada torneo se crea en su fecha, y «hoy» es el miércoles 16/09/2026.
+  const day = (m, d) => new Date(2026, m - 1, d, 10)
+  const { ctx, page, errors } = await openApp(browser, { width: 390, height: 844, mobile: true, clock: day(8, 20) })
   try {
-    const make = async name => {
+    const make = async (name, date) => {
+      await page.clock.setSystemTime(date)
       await newTournament(page, ['Ana', 'Luis', 'Pedro', 'Juan'])
       await page.click('[data-testid="edit-name"]')
       await page.fill('[data-testid="tournament-name"]', name)
@@ -161,19 +164,39 @@ test('Mis torneos: arriba de todo, el más nuevo primero aunque se juegue en uno
       await page.click('[data-testid="start-tournament"]')
       await page.waitForSelector('#view-matches:not([hidden])')
     }
-    await make('Primero')
-    await make('Segundo')
-    // Anotar en el viejo lo guarda después del nuevo, pero no lo sube: manda cuándo se creó.
+    const names = () => page.locator('#setupPage .history .h-name').allTextContents()
+    const period = page.locator('[data-testid="history-period"]')
+    await make('Del mes pasado', day(8, 20))
+    await make('De este mes', day(9, 2))
+    await make('De esta semana', day(9, 14)) // lunes
+    // Hoy todavía no hay ninguno: el filtro de hoy lo dice, y la lista sigue arriba.
+    await page.clock.setSystemTime(day(9, 16))
     await page.click('[data-testid="tab-setup"]')
+    assert.equal(await period.inputValue(), 'today')
+    assert.equal(await page.isVisible('[data-testid="history-empty"]'), true)
+    assert.deepEqual(await names(), [])
+    await make('De hoy', day(9, 16))
+
+    await page.click('[data-testid="tab-setup"]')
+    assert.deepEqual(await names(), ['De hoy'])
+    await period.selectOption('week')
+    assert.deepEqual(await names(), ['De hoy', 'De esta semana'])
+    await period.selectOption('month')
+    assert.deepEqual(await names(), ['De hoy', 'De esta semana', 'De este mes'])
+    await period.selectOption('all')
+    assert.deepEqual(await names(), ['De hoy', 'De esta semana', 'De este mes', 'Del mes pasado'])
+
     // Elegirlo no lleva a Partidos: se queda en Torneo, donde se edita.
-    await page.locator('[data-testid="open-tournament"]', { hasText: 'Primero' }).click()
-    await page.waitForSelector('#setupPage .history-row.current:has-text("Primero")')
+    await page.locator('[data-testid="open-tournament"]', { hasText: 'De este mes' }).click()
+    await page.waitForSelector('#setupPage .history-row.current:has-text("De este mes")')
     assert.equal(await page.isVisible('#view-setup'), true, 'choosing a tournament stays on the tournament tab')
-    assert.equal(await page.textContent('[data-testid="rule-name-text"]'), 'Primero')
+    assert.equal(await page.textContent('[data-testid="rule-name-text"]'), 'De este mes')
+    // Anotar en el viejo lo guarda después de los nuevos, pero no lo sube: manda cuándo se creó.
     await page.click('[data-testid="tab-matches"]')
     await page.fill('#matchesPage [data-testid="score-a"]', '6')
     await page.click('[data-testid="tab-setup"]')
-    assert.deepEqual(await page.locator('#setupPage .history .h-name').allTextContents(), ['Segundo', 'Primero'])
+    assert.equal(await period.inputValue(), 'all', 'the chosen period stays while the tab is open')
+    assert.deepEqual(await names(), ['De hoy', 'De esta semana', 'De este mes', 'Del mes pasado'])
     assert.equal(await page.evaluate(() => document.getElementById('setupPage').firstElementChild.className), 'history')
     assert.deepEqual(errors, [])
   } finally {

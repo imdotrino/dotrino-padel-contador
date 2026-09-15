@@ -19,6 +19,19 @@ let watching = null
 let draft = null // torneo que se está creando: no existe en el store hasta «Empezar»
 let openRule = null // la regla que se está editando, una a la vez
 let ruleForm = null // { source, baseId, name, settings }: el formulario de abajo (editar el set elegido o crear uno a partir de él)
+// Qué torneos enseña «Mis torneos»: los de hoy por defecto (dueño, 2026-09-15). Sobrevive a
+// un refresco pero no a cerrar la pestaña, como la pestaña activa (CONVENCIONES §4).
+const PERIOD_KEY = 'padel.historyPeriod'
+let historyPeriod = readPeriod()
+
+function readPeriod () {
+  try {
+    const v = sessionStorage.getItem(PERIOD_KEY)
+    return engine.HISTORY_PERIODS.includes(v) ? v : 'today'
+  } catch {
+    return 'today' // sin sessionStorage (modo privado): el de por defecto
+  }
+}
 
 const RANGES = { courts: [1, 20], limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
 // Los minutos van de 1 en 1: el valor por defecto (12) no es múltiplo de 5, y de 5 en 5 no
@@ -732,9 +745,16 @@ function formHtml (tour) {
 
 function historyHtml () {
   if (!repo.state.list.length) return ''
+  const since = engine.periodStart(historyPeriod)
   // El más nuevo primero, por cuándo se creó: jugar un partido viejo no lo sube (dueño, 2026-09-15).
-  const list = repo.state.list.slice().sort((x, y) => y.createdAt - x.createdAt)
-  return `<section class="history"><h3>${esc(t('myTournaments'))}</h3><ul>${list.map(tour => {
+  const list = repo.state.list.filter(x => x.createdAt >= since).sort((x, y) => y.createdAt - x.createdAt)
+  const options = engine.HISTORY_PERIODS.map(p => `<option value="${p}"${p === historyPeriod ? ' selected' : ''}>${esc(t('period_' + p))}</option>`).join('')
+  return `<section class="history">
+    <div class="history-head">
+      <h3>${esc(t('myTournaments'))}</h3>
+      <select class="input history-period" data-history-period data-focus-key="historyPeriod" aria-label="${esc(t('periodAria'))}" data-testid="history-period">${options}</select>
+    </div>
+    ${list.length ? `<ul>${list.map(tour => {
     const st = engine.status(tour)
     const size = engine.isFixed(tour)
       ? t('teamsCount', { n: tour.teams.filter(x => x.active).length })
@@ -748,7 +768,8 @@ function historyHtml () {
       </button>
       <button type="button" class="icon-btn" data-action="delete-other" aria-label="${esc(t('deleteTournament'))}">✕</button>
     </li>`
-  }).join('')}</ul></section>`
+  }).join('')}</ul>` : `<p class="hint" data-testid="history-empty">${esc(t('periodEmpty'))}</p>`}
+  </section>`
 }
 
 function renderSetup () {
@@ -1045,6 +1066,11 @@ function onSetupInput (e) {
 
 function onSetupChange (e) {
   const el = e.target
+  if (el.dataset.historyPeriod !== undefined) {
+    historyPeriod = el.value
+    try { sessionStorage.setItem(PERIOD_KEY, historyPeriod) } catch { /* modo privado */ }
+    return renderSetup()
+  }
   if (!el.dataset.rename) return
   if (!el.value.trim()) el.value = playerName(current(), el.dataset.rename)
 }

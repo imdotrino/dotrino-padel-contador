@@ -13,7 +13,8 @@ const TYPES = {
 }
 
 // clock: el reloj del navegador lo controla el test (`page.clock.fastForward`). Se
-// instala antes de cargar, para que la app entera, iframes incluidos, use el mismo.
+// instala antes de cargar, para que la app entera, iframes incluidos, use el mismo. Una
+// fecha (Date) lo arranca en ese momento.
 export async function openApp (browser, { width, height, mobile = false, clock = false }) {
   const ctx = await browser.newContext({
     viewport: { width, height }, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block', locale: 'es-ES'
@@ -36,7 +37,7 @@ export async function openApp (browser, { width, height, mobile = false, clock =
   page.on('pageerror', e => errors.push(e.message))
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.push(`${m.type()}: ${m.text()}`) })
   consoleOf.set(page, console)
-  if (clock) await page.clock.install()
+  if (clock) await page.clock.install(clock instanceof Date ? { time: clock } : undefined)
   await page.goto(`${ORIGIN}/`)
   return { ctx, page, errors }
 }
