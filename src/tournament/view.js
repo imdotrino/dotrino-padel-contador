@@ -623,15 +623,27 @@ function rulesChoiceHtml (tour) {
 //             el torneo.
 //   'builtin' de fábrica: no se editan, solo se guardan como nuevas.
 // Borrar no es cosa del formulario: cada set guardado lleva su ✕ en la lista.
-// «Guardar como nuevas» sirve siempre; fuera de 'set' el nombre propone una copia.
+// «Guardar como nueva» sirve siempre. El nombre es el de las reglas elegidas, tal cual: lo
+// que se está haciendo es editarlas. Solo al guardarlas como nueva, si el nombre no se
+// cambió, se le añade «(copia)» (ver `saveRuleset`).
 function formFrom (set, settings) {
   const source = !set ? 'own' : set.builtin ? 'builtin' : 'set'
+  const name = set ? rulesetName(set) : t('rulesetOwn')
   return {
     source,
     baseId: source === 'set' ? set.id : null,
-    name: source === 'set' ? set.name : t('rulesetCopyName', { name: set ? rulesetName(set) : t('rulesetOwn') }),
+    baseName: name,
+    name,
     settings: structuredClone(settings)
   }
+}
+
+// «Nombre (copia)», o «Nombre (copia 2)», «(copia 3)»… si esa ya existe.
+function copyName (base) {
+  const taken = n => rulesets().some(x => rulesetName(x).toLowerCase() === n.toLowerCase())
+  let name = t('rulesetCopyName', { name: base })
+  for (let n = 2; taken(name); n++) name = t('rulesetCopyNameN', { name: base, n })
+  return name
 }
 
 function formFor (tour) {
@@ -652,7 +664,6 @@ function rulesFormHtml (tour) {
     : {})
   return `<section class="rules-form" data-testid="rules-form">
     <h3>${esc(t('rulesFormEditH'))}</h3>
-    ${builtin ? `<p class="hint" data-testid="builtin-note">${esc(t('rulesetBuiltinNote'))}</p>` : ''}
     ${rule('rulesetName', f.name, () => `<input id="rulesetName" class="input" data-field="rulesetName" data-focus-key="rulesetName"
         maxlength="40" autocomplete="off" value="${esc(f.name)}" aria-label="${esc(t('rulesetName'))}" data-testid="ruleset-name">`)}
     ${rule('partners', t(PARTNER_LABELS[s.partners]), () => seg('partners', [['rotating', 'partnersRotating'], ['fixed', 'partnersFixed']], s.partners))}
@@ -662,6 +673,7 @@ function rulesFormHtml (tour) {
     ${rule('scoring', scoringSummary(s), () => scoringBody(s))}
     ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}
     ${conflicts.length ? `<p class="hint warn-text" data-testid="rules-conflict">${esc(t('rulesConflictSave'))}</p>` : ''}
+    ${builtin ? `<p class="hint" data-testid="builtin-note">${esc(t('rulesetBuiltinNote'))}</p>` : ''}
     <div class="actions">
       <button type="button" class="btn-primary" data-action="update-ruleset" data-testid="update-ruleset"${builtin || conflicts.length ? ' disabled' : ''}>${esc(t('rulesetUpdate'))}</button>
       <button type="button" class="btn" data-action="save-ruleset" data-testid="save-ruleset"${conflicts.length ? ' disabled' : ''}>${esc(t('rulesetSaveNew'))}</button>
@@ -791,7 +803,10 @@ async function storeRuleset (set) {
 // Guardar como set nuevo, y elegirlo para este torneo si se puede.
 async function saveRuleset (tour) {
   const f = ruleForm
-  const name = f.name.trim()
+  // Se clona ahora: si el nombre sigue siendo el de las reglas de las que partió, la nueva
+  // lleva «(copia)» para no confundirse con ellas.
+  const typed = f.name.trim()
+  const name = typed === f.baseName ? copyName(f.baseName) : typed
   const problem = nameProblem(name, null)
   if (problem) return showNameProblem(problem)
   const set = { id: crypto.randomUUID(), name, createdAt: Date.now(), settings: structuredClone(f.settings) }
