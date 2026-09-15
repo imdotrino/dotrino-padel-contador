@@ -291,12 +291,15 @@ test('courts in use never exceed players / 4 (pairs / 2), and are at least one',
   assert.equal(courtsInUse(fixed), 2)
 })
 
-test('rule sets: built-ins are valid; applying copies the rules and never half-applies', () => {
-  const [time, games] = builtinRulesets()
-  for (const set of builtinRulesets()) checkSettings(set.settings)
-  assert.equal(time.settings.matchEnd, 'time')
-  assert.deepEqual([games.settings.matchEnd, games.settings.gamesPerMatch], ['games', 6])
-  assert.notEqual(builtinRulesets()[0].settings, time.settings, 'each call gives fresh objects')
+test('rule sets: one built-in, «Default», valid; applying copies the rules and never half-applies', () => {
+  const builtins = builtinRulesets()
+  assert.deepEqual(builtins.map(s => s.name), ['Default'], 'a single built-in, named Default')
+  const [def] = builtins
+  checkSettings(def.settings)
+  assert.deepEqual(def.settings, defaultSettings())
+  assert.notEqual(builtinRulesets()[0].settings, def.settings, 'each call gives fresh objects')
+  // Un set del usuario que termina por juegos.
+  const games = { settings: { ...defaultSettings(), matchEnd: 'games', gamesPerMatch: 6 } }
 
   const t = withPlayers(8, { courts: 2 })
   applyRules(t, games.settings)

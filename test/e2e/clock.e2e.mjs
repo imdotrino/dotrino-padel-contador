@@ -20,24 +20,20 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     const exact = name => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
     const option = name => page.locator('[data-testid="ruleset"]', { has: page.locator('.ruleset-name', { hasText: exact(name) }) })
 
-    // Por defecto «Americano por tiempo», 20 minutos; el formulario de abajo parte de él.
+    // Una sola regla de fábrica, «Default» (20 minutos): un torneo nuevo arranca con ella, el
+    // formulario lleva su nombre sin «(copia)», y no se guarda ni se borra, y se dice por qué.
+    const del = name => page.locator('.ruleset-row', { has: option(name) }).locator('[data-testid="delete-ruleset"]')
     assert.equal(await chosen.count(), 1)
-    assert.match(await chosen.textContent(), /Americano por tiempo[\s\S]*Por tiempo · 20 minutos/)
-    // Se está editando lo elegido: el nombre es el suyo, sin «(copia)».
-    assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Americano por tiempo')
-    // Los dos botones están siempre; con reglas de fábrica, Guardar no se puede.
-    assert.equal(await page.isDisabled('[data-testid="update-ruleset"]'), true, 'built-in rules are not edited')
+    assert.equal(await page.locator('[data-testid="ruleset"]').count(), 1, 'one built-in')
+    assert.match(await chosen.textContent(), /Default[\s\S]*Por tiempo · 20 minutos/)
+    assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Default')
+    assert.equal(await page.isDisabled('[data-testid="update-ruleset"]'), true, 'the built-in is not edited')
     assert.equal(await page.isEnabled('[data-testid="save-ruleset"]'), true)
+    assert.equal(await del('Default').isDisabled(), true, 'the built-in is not deleted')
+    assert.equal(await page.isVisible('[data-testid="builtin-note"]'), true)
     assert.equal(await page.isVisible('[data-testid="matchMinutes-minus"]'), false, 'options stay closed until Edit')
 
-    // Elegir es excluyente, y el formulario toma los valores del elegido.
-    await option('Americano a 6 juegos').click()
-    assert.equal(await chosen.count(), 1)
-    assert.match(await chosen.textContent(), /Americano a 6 juegos/)
-    assert.equal(await page.textContent('[data-testid="rule-matchEnd-text"]'), 'Por juegos · a 6 juegos')
-
-    // A partir de «Americano por tiempo», un set nuevo de 10 minutos, que queda elegido…
-    await option('Americano por tiempo').click()
+    // Un set «Rápido» de 10 minutos, que queda elegido…
     await page.click('[data-testid="edit-matchEnd"]')
     for (let i = 0; i < 2; i++) await page.click('[data-testid="matchMinutes-minus"]')
     await page.click('[data-testid="edit-rulesetName"]')
@@ -45,7 +41,20 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     await page.click('[data-testid="save-ruleset"]')
     await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Rápido")')
     assert.match(await chosen.textContent(), /Por tiempo · 10 minutos/)
-    // …que después se edita a 5: se actualiza ese mismo, no aparece otro.
+    // …y otro «Por juegos», a partir de él.
+    await page.click('[data-testid="edit-matchEnd"]')
+    await page.click('[data-testid="matchEnd-games"]')
+    await page.click('[data-testid="edit-rulesetName"]')
+    await page.fill('[data-testid="ruleset-name"]', 'Por juegos')
+    await page.click('[data-testid="save-ruleset"]')
+    await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Por juegos · a 6 juegos")')
+
+    // Elegir es excluyente, y el formulario toma los valores del elegido.
+    await option('Rápido').click()
+    assert.equal(await chosen.count(), 1)
+    assert.match(await chosen.textContent(), /Rápido/)
+    assert.equal(await page.textContent('[data-testid="rule-matchEnd-text"]'), 'Por tiempo · 10 minutos')
+    // Editarlo a 5 y «Guardar»: se actualiza ese mismo, no aparece otro.
     await page.click('[data-testid="edit-matchEnd"]')
     await page.click('[data-testid="matchMinutes-minus"]')
     await page.click('[data-testid="update-ruleset"]')
@@ -74,8 +83,11 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     assert.equal(await page.locator('[data-testid="rules-conflict"]').count(), 0)
     // Cada set guardado se borra con su ✕ de la lista (deshabilitado si no hay set que
     // borrar): el torneo conserva sus reglas (5 minutos) como propias, que se pueden guardar.
-    const del = name => page.locator('.ruleset-row', { has: option(name) }).locator('[data-testid="delete-ruleset"]')
-    assert.equal(await del('Americano por tiempo').isDisabled(), true, 'built-in rules are not deleted')
+    // Uno que no está elegido se borra, y lo elegido no cambia.
+    await del('Por juegos').click()
+    await page.click('[data-testid="dialog-ok"]')
+    await page.waitForFunction(() => ![...document.querySelectorAll('.ruleset-name')].some(n => n.textContent === 'Por juegos'))
+    assert.match(await chosen.textContent(), /Rápido \(copia\)/)
     await del('Rápido (copia)').click()
     await page.click('[data-testid="dialog-ok"]')
     await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Reglas de este torneo")')

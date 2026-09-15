@@ -566,8 +566,9 @@ function rosterHtml (tour) {
 // ---------- sets de reglas ----------
 
 // Los de la app primero y después los del usuario, en el orden en que se crearon.
+// Una sola regla de fábrica, «Default» (dueño, 2026-09-15), y después los sets del usuario
+// en el orden en que se crearon.
 const rulesets = () => [...engine.builtinRulesets(), ...repo.state.rulesets.slice().sort((a, b) => a.createdAt - b.createdAt)]
-const rulesetName = set => (set.builtin ? t(set.nameKey) : set.name)
 
 // Lo que activa un set, en fichas cortas. La de canchas va en rojo si con los jugadores
 // de este torneo sobran canchas.
@@ -585,7 +586,7 @@ function rulesChips (tour, s) {
 
 function rulesetOption (tour, set, selected) {
   const blocked = !selected && !engine.canApplyRules(tour, set.settings)
-  const name = rulesetName(set)
+  const name = set.name
   return `<div class="ruleset-row">
     <button type="button" role="radio" class="ruleset${selected ? ' on' : ''}" aria-checked="${selected}"
       data-ruleset="${esc(set.id)}"${blocked ? ' disabled' : ''} data-testid="ruleset">
@@ -619,16 +620,16 @@ function rulesChoiceHtml (tour) {
 
 // El formulario parte de las reglas elegidas, y `source` dice de dónde salen:
 //   'set'     un set del usuario: «Guardar» lo edita; lleva su nombre.
-//   'own'     las reglas propias del torneo (su set ya no existe): «Guardar» las cambia en
-//             el torneo.
-//   'builtin' de fábrica: no se editan, solo se guardan como nuevas.
+//   'own'     las reglas propias del torneo (su set se borró): «Guardar» las cambia en el
+//             torneo.
+//   'builtin' «Default», la de fábrica: no se edita ni se borra; se guarda como nueva.
 // Borrar no es cosa del formulario: cada set guardado lleva su ✕ en la lista.
 // «Guardar como nueva» sirve siempre. El nombre es el de las reglas elegidas, tal cual: lo
 // que se está haciendo es editarlas. Solo al guardarlas como nueva, si el nombre no se
 // cambió, se le añade «(copia)» (ver `saveRuleset`).
 function formFrom (set, settings) {
   const source = !set ? 'own' : set.builtin ? 'builtin' : 'set'
-  const name = set ? rulesetName(set) : t('rulesetOwn')
+  const name = set ? set.name : t('rulesetOwn')
   return {
     source,
     baseId: source === 'set' ? set.id : null,
@@ -640,7 +641,7 @@ function formFrom (set, settings) {
 
 // «Nombre (copia)», o «Nombre (copia 2)», «(copia 3)»… si esa ya existe.
 function copyName (base) {
-  const taken = n => rulesets().some(x => rulesetName(x).toLowerCase() === n.toLowerCase())
+  const taken = n => rulesets().some(x => x.name.toLowerCase() === n.toLowerCase())
   let name = t('rulesetCopyName', { name: base })
   for (let n = 2; taken(name); n++) name = t('rulesetCopyNameN', { name: base, n })
   return name
@@ -745,6 +746,7 @@ function commit (tour) {
 }
 
 function startDraft () {
+  // Arranca con «Default», la regla de fábrica.
   const base = engine.builtinRulesets()[0]
   draft = engine.createTournament({ name: t('defaultTournamentName', { date: formatDate(Date.now()) }), settings: base.settings, rulesetId: base.id })
   openRule = null
@@ -778,7 +780,7 @@ async function selectRuleset (tour, id) {
 // El nombre hace falta y no se repite: en la lista, dos opciones iguales no se distinguen.
 function nameProblem (name, exceptId) {
   if (!name) return 'rulesetNeedsName'
-  const taken = rulesets().some(x => x.id !== exceptId && rulesetName(x).toLowerCase() === name.toLowerCase())
+  const taken = rulesets().some(x => x.id !== exceptId && x.name.toLowerCase() === name.toLowerCase())
   return taken ? 'rulesetNameTaken' : null
 }
 
@@ -824,7 +826,7 @@ async function saveRuleset (tour) {
 // las reglas propias del torneo, cambian solo en el torneo.
 async function updateRuleset (tour) {
   const f = ruleForm
-  if (f.source === 'builtin') throw new Error('built-in rules cannot be changed')
+  if (f.source === 'builtin') throw new Error('the built-in rules cannot be changed')
   if (f.source === 'own') {
     if (!engine.canApplyRules(tour, f.settings)) return toast(t('rulesetBlocked'), 'error')
     if (!(await useRules(tour, f.settings, tour.rulesetId))) return

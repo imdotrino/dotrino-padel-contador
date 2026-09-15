@@ -94,13 +94,11 @@ export function settingsConflicts (s) {
 
 // ---------- construcción ----------
 
-// Los sets de reglas que trae la app (los del usuario viven en el store). Función y no
-// constante: cada llamada da objetos nuevos, que nadie puede modificar por error.
+// La regla de fábrica: una sola, «Default» (el nombre va tal cual en los dos idiomas). Los
+// sets del usuario viven en el store. Función y no constante: cada llamada da objetos
+// nuevos, que nadie puede modificar por error.
 export function builtinRulesets () {
-  return [
-    { id: 'builtin-time', builtin: true, nameKey: 'rulesetBuiltinTime', settings: defaultSettings() },
-    { id: 'builtin-games', builtin: true, nameKey: 'rulesetBuiltinGames', settings: { ...defaultSettings(), matchEnd: 'games', gamesPerMatch: 6 } }
-  ]
+  return [{ id: 'builtin-default', builtin: true, name: 'Default', settings: defaultSettings() }]
 }
 
 // rulesetId: de qué set salieron las reglas (null si no salieron de ninguno).
