@@ -22,7 +22,10 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     assert.equal(await chosen.count(), 1)
     assert.match(await chosen.textContent(), /Americano por tiempo[\s\S]*Por tiempo · 20 minutos/)
     assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Americano por tiempo (copia)')
-    assert.equal(await page.isVisible('[data-testid="update-ruleset"]'), false, 'built-in rules are not edited')
+    // Los tres botones están siempre; con reglas de fábrica, Guardar y Borrar no se pueden.
+    assert.equal(await page.isDisabled('[data-testid="update-ruleset"]'), true, 'built-in rules are not edited')
+    assert.equal(await page.isDisabled('[data-testid="remove-ruleset"]'), true, 'built-in rules are not deleted')
+    assert.equal(await page.isEnabled('[data-testid="save-ruleset"]'), true)
     assert.equal(await page.isVisible('[data-testid="matchMinutes-minus"]'), false, 'options stay closed until Edit')
 
     // Elegir es excluyente, y el formulario toma los valores del elegido.
@@ -50,6 +53,17 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     await page.click('[data-testid="save-ruleset"]')
     assert.match(await page.textContent('#toast'), /Ya hay unas reglas con ese nombre/)
     assert.equal(await option('Rápido').count(), 1)
+    // Borrarlo desde el formulario: el torneo conserva sus reglas (5 minutos) como propias,
+    // que se pueden guardar pero no borrar.
+    assert.equal(await page.isEnabled('[data-testid="remove-ruleset"]'), true)
+    await page.click('[data-testid="remove-ruleset"]')
+    await page.click('[data-testid="dialog-ok"]')
+    await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Reglas de este torneo")')
+    assert.equal(await option('Rápido').count(), 0)
+    assert.match(await chosen.textContent(), /Por tiempo · 5 minutos/)
+    assert.equal(await page.isDisabled('[data-testid="remove-ruleset"]'), true, 'own rules have no set to delete')
+    await page.click('[data-testid="update-ruleset"]')
+    assert.match(await page.textContent('#toast'), /Reglas de este torneo actualizadas/)
     await page.click('[data-testid="start-tournament"]')
 
     assert.equal(await page.textContent('[data-testid="clock-time"]'), '5:00')

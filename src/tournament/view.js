@@ -14,7 +14,7 @@ import * as repo from './repo.js'
 let ui = null // { goTab, playMatch, linkedMatchId }
 let draft = null // torneo que se está creando: no existe en el store hasta «Empezar»
 let openRule = null // la regla que se está editando, una a la vez
-let ruleForm = null // { baseId, name, settings }: el formulario de abajo (editar el set elegido o crear uno a partir de él)
+let ruleForm = null // { source, baseId, name, settings }: el formulario de abajo (editar el set elegido o crear uno a partir de él)
 
 const RANGES = { courts: [1, 20], limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
 const STEPS = { matchMinutes: 5 }
@@ -523,15 +523,18 @@ function rulesChoiceHtml (tour) {
   </section>`
 }
 
-// El formulario parte de un set: si es del usuario se puede editar ese mismo (y lleva su
-// nombre); si es de fábrica, o son las reglas propias del torneo, solo se guarda como
-// set nuevo (y el nombre propone una copia).
+// El formulario parte de las reglas elegidas, y `source` dice de dónde salen:
+//   'set'     un set del usuario: «Guardar» lo edita y «Borrar» lo borra; lleva su nombre.
+//   'own'     las reglas propias del torneo (su set ya no existe): «Guardar» las cambia en
+//             el torneo; no hay set que borrar.
+//   'builtin' de fábrica: no se editan ni se borran, solo se guardan como nuevas.
+// «Guardar como nuevas» sirve siempre; fuera de 'set' el nombre propone una copia.
 function formFrom (set, settings) {
-  const own = set && !set.builtin
+  const source = !set ? 'own' : set.builtin ? 'builtin' : 'set'
   return {
-    baseId: own ? set.id : null,
-    name: own ? set.name : t('rulesetCopyName', { name: set ? rulesetName(set) : t('rulesetOwn') }),
-    builtin: Boolean(set?.builtin),
+    source,
+    baseId: source === 'set' ? set.id : null,
+    name: source === 'set' ? set.name : t('rulesetCopyName', { name: set ? rulesetName(set) : t('rulesetOwn') }),
     settings: structuredClone(settings)
   }
 }
@@ -546,10 +549,10 @@ function rulesFormHtml (tour) {
   const s = f.settings
   const est = estimateText(tour, s)
   const over = courtsOver(tour, s)
-  const editing = Boolean(f.baseId)
+  const builtin = f.source === 'builtin'
   return `<section class="rules-form" data-testid="rules-form">
-    <h3>${esc(t(editing ? 'rulesFormEditH' : 'rulesFormH'))}</h3>
-    ${f.builtin ? `<p class="hint" data-testid="builtin-note">${esc(t('rulesetBuiltinNote'))}</p>` : ''}
+    <h3>${esc(t('rulesFormEditH'))}</h3>
+    ${builtin ? `<p class="hint" data-testid="builtin-note">${esc(t('rulesetBuiltinNote'))}</p>` : ''}
     ${rule('rulesetName', f.name, () => `<input id="rulesetName" class="input" data-field="rulesetName" data-focus-key="rulesetName"
         maxlength="40" autocomplete="off" value="${esc(f.name)}" aria-label="${esc(t('rulesetName'))}" data-testid="ruleset-name">`)}
     ${rule('partners', t(PARTNER_LABELS[s.partners]), () => seg('partners', [['rotating', 'partnersRotating'], ['fixed', 'partnersFixed']], s.partners))}
@@ -559,8 +562,10 @@ function rulesFormHtml (tour) {
     ${rule('scoring', scoringSummary(s), () => scoringBody(s))}
     ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}
     <div class="actions">
-      ${editing ? `<button type="button" class="btn-primary" data-action="update-ruleset" data-testid="update-ruleset">${esc(t('rulesetUpdate'))}</button>` : ''}
-      <button type="button" class="${editing ? 'btn' : 'btn-primary'}" data-action="save-ruleset" data-testid="save-ruleset">${esc(t('rulesetSaveNew'))}</button>
+      <button type="button" class="btn-primary" data-action="update-ruleset" data-testid="update-ruleset"${builtin ? ' disabled' : ''}>${esc(t('rulesetUpdate'))}</button>
+      <button type="button" class="btn" data-action="save-ruleset" data-testid="save-ruleset">${esc(t('rulesetSaveNew'))}</button>
+      <button type="button" class="btn danger" data-action="delete-ruleset" data-ruleset-id="${esc(f.baseId || '')}"
+        data-testid="remove-ruleset"${f.source === 'set' ? '' : ' disabled'}>${esc(t('rulesetDeleteBtn'))}</button>
     </div>
   </section>`
 }
@@ -699,10 +704,19 @@ async function saveRuleset (tour) {
   $('setupPage').querySelector('[data-testid="rules-choice"]').scrollIntoView({ block: 'start', behavior: 'smooth' })
 }
 
-// Guardar los cambios en el set del que partió el formulario. Si este torneo lo usa, sus
-// reglas cambian con él; los demás torneos conservan su copia.
+// Guardar los cambios en las reglas de las que partió el formulario. Si es un set y este
+// torneo lo usa, sus reglas cambian con él; los demás torneos conservan su copia. Si son
+// las reglas propias del torneo, cambian solo en el torneo.
 async function updateRuleset (tour) {
   const f = ruleForm
+  if (f.source === 'builtin') throw new Error('built-in rules cannot be changed')
+  if (f.source === 'own') {
+    if (!engine.canApplyRules(tour, f.settings)) return toast(t('rulesetBlocked'), 'error')
+    if (!(await useRules(tour, f.settings, tour.rulesetId))) return
+    openRule = null
+    commit(tour)
+    return toast(t('rulesetOwnUpdated'))
+  }
   const set = repo.state.rulesets.find(x => x.id === f.baseId)
   if (!set) throw new Error(`unknown ruleset ${f.baseId}`)
   const name = f.name.trim()
@@ -730,6 +744,9 @@ async function deleteRuleset (id) {
     toast(t('saveFailed', { reason: e.message }), 'error')
     return
   }
+  // Si el formulario estaba sobre ese set, vuelve a partir de las reglas del torneo: si no,
+  // «Guardar» apuntaría a un set que ya no existe.
+  if (ruleForm?.baseId === id) ruleForm = null
   renderSetup()
 }
 
