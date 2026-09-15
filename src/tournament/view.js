@@ -118,7 +118,7 @@ function roundHtml (tour, r, i) {
       <h3>${esc(t('round', { n: i + 1 }))}</h3>
       <div class="round-actions" data-round-actions>${last ? roundActions(tour) : ''}</div>
     </div>
-    ${r.matches.map(m => matchHtml(tour, m)).join('')}
+    <div class="round-matches">${r.matches.map(m => matchHtml(tour, m)).join('')}</div>
     ${rest}
   </section>`
 }
@@ -305,9 +305,9 @@ function rosterHtml (tour) {
   const addInput = (name, key) => `<input class="input" name="${name}" data-focus-key="${key}" placeholder="${esc(t('playerPlaceholder'))}"
     maxlength="24" autocomplete="off" enterkeyhint="next" data-testid="${key}">`
   if (engine.isFixed(tour)) {
-    return `<div class="field">
+    return `<div class="field field-roster">
       <div class="field-head"><span class="label">${esc(t('teams', { n: tour.teams.filter(x => x.active).length }))}</span></div>
-      <ul class="roster">${tour.teams.map(team => `<li class="roster-row team${team.active ? '' : ' retired'}" data-team="${team.id}">
+      <ul class="roster roster-teams">${tour.teams.map(team => `<li class="roster-row team${team.active ? '' : ' retired'}" data-team="${team.id}">
         ${team.players.map(pid => nameInput(tour, pid)).join('<span class="sep">/</span>')}
         ${unitButton(team, 'team')}
       </li>`).join('')}</ul>
@@ -317,9 +317,9 @@ function rosterHtml (tour) {
       </form>
     </div>`
   }
-  return `<div class="field">
+  return `<div class="field field-roster">
     <div class="field-head"><span class="label">${esc(t('players', { n: tour.players.filter(p => p.active).length }))}</span></div>
-    <ul class="roster">${tour.players.map(p => `<li class="roster-row${p.active ? '' : ' retired'}" data-player="${p.id}">
+    <ul class="roster roster-players">${tour.players.map(p => `<li class="roster-row${p.active ? '' : ' retired'}" data-player="${p.id}">
       ${nameInput(tour, p.id)}${unitButton(p, 'player')}
     </li>`).join('')}</ul>
     <form class="roster-add" data-form="player">
@@ -340,6 +340,7 @@ function formHtml (tour) {
     `<p class="hint" data-testid="estimate">${est ? esc(t(est.exact ? 'estimateExact' : 'estimate', est)) : ''}</p>`
   return `
     <header class="t-head"><h2>${esc(t(isDraft ? 'newTournamentH' : 'tournamentH'))}</h2></header>
+    <div class="setup-form">
     <div class="field">
       <label class="label" for="tourName">${esc(t('name'))}</label>
       <input id="tourName" class="input" data-field="name" data-focus-key="name" maxlength="40" autocomplete="off"
@@ -362,7 +363,8 @@ function formHtml (tour) {
       : `<div class="actions">
           <button type="button" class="btn" data-action="new" data-testid="new-tournament">${esc(t('newTournament'))}</button>
           <button type="button" class="btn danger" data-action="delete" data-testid="delete-tournament">${esc(t('deleteTournament'))}</button>
-        </div>`}`
+        </div>`}
+    </div>`
 }
 
 function historyHtml () {

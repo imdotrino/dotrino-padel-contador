@@ -192,6 +192,9 @@ dotrino-topbar {
 .linked-leave:active { background: var(--surface-2); color: #fff; }
 
 .board {
+  /* Ancho de la cancha del saque. Los paneles reservan su alto abajo, así el marcador
+     nunca queda debajo de la cancha (en vertical va al pie, entre los dos paneles). */
+  --court-w: min(40vw, 26vh);
   flex: 1;
   display: flex;
   min-height: 0;
@@ -204,7 +207,7 @@ dotrino-topbar {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding-bottom: 10vh;
+  padding-bottom: calc(var(--court-w) * .64 + 4vh);
   color: #fff;
   transition: background-color .2s;
   cursor: pointer;
@@ -334,7 +337,7 @@ dotrino-topbar {
 .serve-court {
   position: absolute;
   left: 50%;
-  bottom: 14vh;
+  bottom: 2vh;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -346,7 +349,7 @@ dotrino-topbar {
   color: #fff;
   text-shadow: 0 1px 3px rgba(0,0,0,.5);
 }
-.serve-court svg { width: min(40vw, 26vh); height: auto; }
+.serve-court svg { width: var(--court-w); height: auto; display: block; }
 
 .serve-label {
   margin-top: 1vh;
@@ -395,15 +398,16 @@ body.tiebreak .tie-badge { display: block; }
   border: none;
   background: transparent;
   color: var(--muted);
-  font-size: 1.9vh;
+  /* Con un piso: en un móvil girado 1.9vh son 7 px y no se lee. */
+  font-size: max(12px, 1.9vh);
   font-weight: 700;
-  padding: 1.6vh 0;
+  padding: max(9px, 1.6vh) 0;
   text-transform: uppercase;
   letter-spacing: .05em;
   cursor: pointer;
 }
 .controls button:active { background: var(--surface); }
-.controls .btn-serve { background: var(--accent); color: var(--on-accent); font-size: 2.2vh; }
+.controls .btn-serve { background: var(--accent); color: var(--on-accent); font-size: max(13px, 2.2vh); }
 .controls .btn-serve:active { background: var(--accent-strong); }
 
 /* --- Modales --- */
@@ -701,15 +705,33 @@ label.label { margin-bottom: 8px; }
 .h-meta { font-size: 12px; color: var(--muted); }
 
 /* Pantallas bajas (móvil pequeño, o el navegador con sus barras a la vista):
-   la cancha del saque se encoge y baja para no taparse con el marcador. */
+   la cancha del saque se encoge, y con ella el hueco que le reservan los paneles. */
 @media (max-height: 740px) {
-  .team { padding-bottom: 6vh; }
+  .board { --court-w: min(30vw, 17vh); }
   .points { font-size: 17vw; }
   .points-adj { margin-top: .2vh; gap: 8vw; }
   .adj-points { min-width: 48px; min-height: 48px; }
   .serve-label { margin-top: .2vh; }
-  .serve-court { bottom: 3vh; }
-  .serve-court svg { width: min(30vw, 17vh); }
+}
+
+/* Apaisado (escritorio, tablet o móvil girado): lo que escasea es el ALTO. La cancha va
+   en el centro, sobre la red y entre los dos marcadores, sin quitarles alto; y el texto
+   se mide también por el alto, o el bloque no cabe y el nombre sale cortado arriba. */
+@media (min-aspect-ratio: 5/4) {
+  .team { padding-bottom: 3vh; }
+  .serve-court { top: 50%; bottom: auto; transform: translate(-50%, -50%); }
+  .name { font-size: min(4.2vw, 5.5vh); }
+  .points { font-size: min(22vw, 30vh); }
+}
+@media (min-aspect-ratio: 5/4) and (max-height: 740px) {
+  .points { font-size: min(17vw, 26vh); }
+}
+/* Móvil girado: el panel no llega a 250 px de alto. Los +/− bajan del mínimo táctil
+   de 44 px, o el marcador no cabe entero. */
+@media (min-aspect-ratio: 5/4) and (max-height: 500px) {
+  .points { font-size: min(17vw, 20vh); }
+  .adj { width: 32px; height: 32px; min-width: 32px; min-height: 32px; font-size: 16px; }
+  .adj-points { width: 36px; height: 36px; min-width: 36px; min-height: 36px; font-size: 20px; }
 }
 
 /* Solo en web (pantalla ancha + puntero fino): sets y games más grandes,
@@ -725,4 +747,30 @@ label.label { margin-bottom: 8px; }
   .adj { width: 22px; height: 22px; min-width: 22px; min-height: 22px; font-size: 16px; border-width: 1px; }
   .adj-points { width: 34px; height: 34px; min-width: 34px; min-height: 34px; font-size: 22px; }
   .points-adj { gap: 4vw; }
+}
+
+/* Escritorio: las pestañas del torneo usan el ancho. Partidos en rejilla, la
+   configuración en dos columnas (ajustes | jugadores) y la tabla a un ancho legible. */
+@media (min-width: 900px) {
+  .tabs { justify-content: center; }
+  .tab { flex: 0 1 220px; }
+  .page { max-width: 1120px; padding-inline: 32px; }
+  #tablePage { max-width: 820px; }
+  #nextBlock .btn-primary.block { width: auto; min-width: 280px; padding: 0 28px; }
+  .round-head { justify-content: flex-start; gap: 16px; }
+  .round-matches { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
+  .round-matches .match { margin-bottom: 0; }
+  .setup-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    /* La última fila es flexible: si los jugadores ocupan más alto que los ajustes, el
+       sobrante va ahí y no separa los ajustes entre sí. 9 = los hijos de la columna 1. */
+    grid-template-rows: repeat(9, auto) 1fr;
+    column-gap: 48px;
+    align-items: start;
+  }
+  .setup-form > * { grid-column: 1; }
+  .setup-form > .field-roster { grid-column: 2; grid-row: 1 / -1; }
+  .roster-players { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 10px; }
+  .history ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px 12px; }
 }

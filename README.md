@@ -15,6 +15,8 @@ Vite sin framework (CONVENCIONES §1).
 npm install
 npm run dev      # http://localhost:3210
 npm test         # motor del torneo (node --test, sin navegador)
+npm run test:e2e # maquetación con Playwright: nada encimado en el marcador y el torneo
+                 # a lo ancho en escritorio, en 9 tamaños; sirve dist/ bajo padel.dotrino.com (necesita red)
 npm run build    # dist/
 ```
 
