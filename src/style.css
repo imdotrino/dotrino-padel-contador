@@ -692,6 +692,8 @@ label.label { margin-bottom: 8px; }
 .rule-edit { flex-shrink: 0; }
 .rule.open .rule-edit { border-color: var(--accent); color: var(--accent); }
 .rule-editor { margin-top: 12px; }
+/* Una regla que se guarda pero no se cumple tal cual (más canchas que jugadores). */
+.rule.warn .rule-text, .rule.warn .hint { color: #f87171; }
 .setup-form > .field-roster { padding-top: 12px; }
 .row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .unit { color: var(--muted); font-size: 14px; }

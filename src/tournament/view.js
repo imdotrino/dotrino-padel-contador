@@ -14,7 +14,7 @@ let ui = null // { goTab, playMatch, linkedMatchId }
 let draft = null // torneo que se está creando: no existe en el store hasta «Empezar»
 let openRule = null // la regla que se está editando, una a la vez
 
-const RANGES = { limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
+const RANGES = { courts: [1, 20], limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
 const STEPS = { matchMinutes: 5 }
 const LABELS = { name: 'name', partners: 'partners', pairing: 'pairing', courts: 'courts', limit: 'limit', scoring: 'scoring', matchEnd: 'matchEnd' }
 const INFOS = new Set(['partners', 'pairing', 'limit', 'scoring', 'matchEnd'])
@@ -345,15 +345,17 @@ async function onTableClick (e) {
 
 // Una regla del torneo se LEE como texto, con «Editar» al lado; al pulsarlo aparecen sus
 // opciones y su explicación. `editor` es una función: solo se pinta la que está abierta.
-function rule (key, text, editor, { editable = true, note = '' } = {}) {
+// `warn`: la regla se puede guardar así, pero no se va a cumplir tal cual; va en rojo y
+// `note` dice qué pasará.
+function rule (key, text, editor, { editable = true, note = '', warn = false } = {}) {
   const open = editable && openRule === key
   const label = t(LABELS[key])
-  return `<div class="rule${open ? ' open' : ''}" data-rule="${key}" data-testid="rule-${key}">
+  return `<div class="rule${open ? ' open' : ''}${warn ? ' warn' : ''}" data-rule="${key}" data-testid="rule-${key}">
     <div class="rule-line">
       <div class="rule-main">
         <span class="label">${esc(label)}</span>
         <p class="rule-text" data-testid="rule-${key}-text">${esc(text)}</p>
-        ${note ? `<p class="hint">${esc(note)}</p>` : ''}
+        ${note ? `<p class="hint" data-testid="rule-${key}-note">${esc(note)}</p>` : ''}
       </div>
       ${editable
         ? `<button type="button" class="btn-small rule-edit" data-edit="${key}" aria-expanded="${open}"
@@ -404,15 +406,17 @@ function matchEndSummary (s) {
   throw new Error(`unknown match end: ${s.matchEnd}`)
 }
 
-// Las canchas: el tope son las que caben con los jugadores de ahora, y se dice cuántas.
-function courtsEditor (tour) {
-  const inUse = engine.courtsInUse(tour)
+// Más canchas de las que llenan los jugadores se pueden poner (son las del club), pero
+// se juega en las que caben: la regla va en rojo y lo dice. Con menos de una cancha
+// llena no se avisa aquí: ya lo dice «Empezar».
+function courtsRule (tour) {
+  const s = tour.settings
   const max = engine.maxCourts(tour)
-  const fixed = engine.isFixed(tour)
-  const hint = max < 1
-    ? t(fixed ? 'needTeams' : 'needPlayers', { n: engine.minUnits(tour) })
-    : tn(fixed ? 'courtsMaxTeams' : 'courtsMaxPlayers', max, { units: engine.activeUnits(tour).length, n: max })
-  return stepper('courts', inUse, String(inUse), [1, Math.max(1, max)]) + `<p class="hint" data-testid="courts-hint">${esc(hint)}</p>`
+  const over = max >= 1 && s.courts > max
+  const note = over
+    ? tn(engine.isFixed(tour) ? 'courtsOverTeams' : 'courtsOverPlayers', max, { units: engine.activeUnits(tour).length, n: max })
+    : ''
+  return rule('courts', tn('courtsCount', s.courts), () => stepper('courts', s.courts, String(s.courts)), { note, warn: over })
 }
 
 function limitEditor (s, estimateText) {
@@ -478,7 +482,7 @@ function formHtml (tour) {
     ${rule('pairing', t(PAIRING_LABELS[s.pairing]),
       () => seg('pairing', [['random', 'pairingRandom'], ['ranked', 'pairingRanked']], s.pairing))}
     ${rosterHtml(tour)}
-    ${rule('courts', tn('courtsCount', engine.courtsInUse(tour)), () => courtsEditor(tour))}
+    ${courtsRule(tour)}
     ${rule('limit', `${s.limitValue} ${limitText}${estimateText ? ' · ' + estimateText : ''}`, () => limitEditor(s, estimateText))}
     ${rule('scoring', scoringSummary(s), () => scoringBody(s))}
     ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}
@@ -580,9 +584,6 @@ function onStep (name, delta) {
   if (name.startsWith('points-')) {
     const kind = tour.settings.scoring[name.slice('points-'.length)]
     kind.points = clamp(kind.points + delta, RANGES.points)
-  } else if (name === 'courts') {
-    // Se cuenta desde las que se usan: con 9 jugadores y 3 guardadas, «−» deja 1, no 2.
-    tour.settings.courts = clamp(engine.courtsInUse(tour) + delta, [1, Math.max(1, engine.maxCourts(tour))])
   } else {
     tour.settings[name] = clamp(tour.settings[name] + delta, RANGES[name])
   }

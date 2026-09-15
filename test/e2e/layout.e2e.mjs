@@ -18,11 +18,17 @@ after(async () => { await browser?.close() })
 // Un torneo con dos rondas (la primera con resultados) y el marcador en 40–AD.
 async function seed (page) {
   await newTournament(page, PLAYERS)
-  // 9 jugadores: caben 2 canchas y no se puede pedir una tercera.
+  // 9 jugadores llenan 2 canchas: se pueden poner 3, pero la regla va en rojo y dice
+  // que se juega en 2.
+  const courts = page.locator('[data-testid="rule-courts"]')
   await page.click('[data-testid="edit-courts"]')
-  assert.equal(await page.textContent('[data-testid="rule-courts-text"]'), '2 canchas')
-  assert.equal(await page.isDisabled('[data-testid="courts-plus"]'), true, '9 players fit 2 courts at most')
-  assert.equal(await page.textContent('[data-testid="courts-hint"]'), 'Con 9 jugadores caben 2 canchas como máximo.')
+  assert.equal(await courts.getAttribute('class'), 'rule open')
+  await page.click('[data-testid="courts-plus"]')
+  assert.equal(await page.textContent('[data-testid="rule-courts-text"]'), '3 canchas')
+  assert.match(await courts.getAttribute('class'), /\bwarn\b/)
+  assert.equal(await page.textContent('[data-testid="rule-courts-note"]'), 'Con 9 jugadores solo se llenan 2 canchas: se juega en 2.')
+  await page.click('[data-testid="courts-minus"]')
+  assert.doesNotMatch(await courts.getAttribute('class'), /\bwarn\b/)
   await page.click('[data-testid="edit-name"]')
   await page.fill('[data-testid="tournament-name"]', 'Torneo de los jueves del club de pádel')
   assert.equal(await page.textContent('[data-testid="rule-name-text"]'), 'Torneo de los jueves del club de pádel')
