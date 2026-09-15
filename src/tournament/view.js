@@ -118,14 +118,17 @@ function matchHtml (tour, m) {
 // solo el tiempo mientras el estado no cambie (ver `tick`).
 function clockHtml (tour, r) {
   const c = engine.clockOf(tour, r, Date.now())
-  const btn = (action, label, primary = false) =>
-    `<button type="button" class="${primary ? 'btn-primary' : 'btn'}" data-action="${action}" data-testid="${action}">${esc(t(label))}</button>`
-  const actions = {
-    idle: btn('clock-start', 'clockStart', true),
-    running: btn('clock-pause', 'clockPause') + btn('clock-reset', 'clockReset'),
-    paused: btn('clock-resume', 'clockResume', true) + btn('clock-reset', 'clockReset'),
-    done: btn('clock-reset', 'clockReset')
+  const btn = (action, label, { primary = false, disabled = false } = {}) =>
+    `<button type="button" class="${primary ? 'btn-primary' : 'btn'}" data-action="${action}" data-testid="${action}"${disabled ? ' disabled' : ''}>${esc(t(label))}</button>`
+  // Siempre dos botones: el principal cambia con el estado, y lo que no aplica se deshabilita.
+  const main = {
+    idle: btn('clock-start', 'clockStart', { primary: true }),
+    running: btn('clock-pause', 'clockPause'),
+    paused: btn('clock-resume', 'clockResume', { primary: true }),
+    done: btn('clock-start', 'clockStart', { primary: true, disabled: true })
   }[c.state]
+  if (!main) throw new Error(`unknown clock state: ${c.state}`)
+  const actions = main + btn('clock-reset', 'clockReset', { disabled: c.state === 'idle' })
   return `<div class="clock ${c.state}" data-clock="${r.id}" data-state="${c.state}" role="timer" aria-label="${esc(t('clockAria'))}" data-testid="round-clock">
     <span class="clock-time" data-testid="clock-time">${esc(clockText(c))}</span>
     <span class="clock-actions">${actions}</span>
@@ -134,10 +137,13 @@ function clockHtml (tour, r) {
 
 const clockText = c => (c.state === 'done' ? t('clockDone') : engine.formatClock(c.remainingMs))
 
-const roundActions = tour => engine.canRedoLastRound(tour)
-  ? `<button type="button" class="btn-small" data-action="redo" data-testid="redo-round">${esc(t('redo'))}</button>
-     <button type="button" class="btn-small" data-action="drop" data-testid="drop-round">${esc(t('dropRound'))}</button>`
-  : ''
+// Solo la última ronda se rehace o se quita, y solo sin resultados: con resultados, los
+// botones se ven deshabilitados.
+const roundActions = tour => {
+  const off = engine.canRedoLastRound(tour) ? '' : ' disabled'
+  return `<button type="button" class="btn-small" data-action="redo" data-testid="redo-round"${off}>${esc(t('redo'))}</button>
+     <button type="button" class="btn-small" data-action="drop" data-testid="drop-round"${off}>${esc(t('dropRound'))}</button>`
+}
 
 function roundHtml (tour, r, i) {
   const last = i === tour.rounds.length - 1
@@ -166,21 +172,23 @@ function paintProgress (tour) {
 function paintNext (tour) {
   const box = $('nextBlock')
   const blocker = engine.nextRoundBlocker(tour)
+  // «Armar ronda» siempre está; si no toca otra ronda, deshabilitado y con el porqué.
+  const next = `<button type="button" class="btn-primary block" data-action="next" data-testid="next-round"${blocker ? ' disabled' : ''}>${esc(t('nextRound', { n: tour.rounds.length + 1 }))}</button>`
   if (blocker === 'players') {
-    box.innerHTML = `<div class="notice"><p>${esc(t(engine.isFixed(tour) ? 'needTeams' : 'needPlayers', { n: engine.minUnits(tour) }))}</p>
+    box.innerHTML = next + `<div class="notice"><p>${esc(t(engine.isFixed(tour) ? 'needTeams' : 'needPlayers', { n: engine.minUnits(tour) }))}</p>
       <button type="button" class="btn" data-action="go-setup">${esc(t('goSetup'))}</button></div>`
     return
   }
   if (blocker === 'finished') {
-    box.innerHTML = engine.status(tour).finished
+    box.innerHTML = (engine.status(tour).finished
       ? `<div class="finished" data-testid="finished"><strong>🏆 ${esc(t('finished'))}</strong>
           <button type="button" class="btn" data-action="see-table">${esc(t('seeTable'))}</button></div>`
-      : ''
+      : '') + next
     return
   }
   const last = tour.rounds[tour.rounds.length - 1]
   const pending = tour.settings.pairing === 'ranked' && last && !last.matches.every(engine.hasScore)
-  box.innerHTML = `<button type="button" class="btn-primary block" data-action="next" data-testid="next-round">${esc(t('nextRound', { n: tour.rounds.length + 1 }))}</button>
+  box.innerHTML = `${next}
     ${pending ? `<p class="hint">${esc(t('rankedPending', { n: tour.rounds.length }))}</p>` : ''}`
 }
 
@@ -359,10 +367,8 @@ function rule (key, text, editor, { editable = true, note = '', warn = false } =
         <p class="rule-text" data-testid="rule-${key}-text">${esc(text)}</p>
         ${note ? `<p class="hint" data-testid="rule-${key}-note">${esc(note)}</p>` : ''}
       </div>
-      ${editable
-        ? `<button type="button" class="btn-small rule-edit" data-edit="${key}" aria-expanded="${open}"
-            aria-label="${esc(t(open ? 'ruleDoneAria' : 'ruleEditAria', { rule: label }))}" data-testid="edit-${key}">${esc(t(open ? 'ruleDone' : 'ruleEdit'))}</button>`
-        : ''}
+      <button type="button" class="btn-small rule-edit" data-edit="${key}" aria-expanded="${open}"
+        aria-label="${esc(t(open ? 'ruleDoneAria' : 'ruleEditAria', { rule: label }))}" data-testid="edit-${key}"${editable ? '' : ' disabled'}>${esc(t(open ? 'ruleDone' : 'ruleEdit'))}</button>
     </div>
     ${open ? `<div class="rule-editor">${INFOS.has(key) ? `<p class="info-text">${esc(t('info_' + key))}</p>` : ''}${editor()}</div>` : ''}
   </div>`
@@ -372,11 +378,12 @@ const seg = (name, options, value, disabled = false) => `<div class="seg" role="
   `<button type="button" class="seg-btn${v === value ? ' on' : ''}" data-seg="${name}" data-value="${v}"
     aria-pressed="${v === value}"${disabled ? ' disabled' : ''} data-testid="${name}-${v}">${esc(t(label))}</button>`).join('')}</div>`
 
-function stepper (name, value, shown, [min, max] = RANGES[name], step = STEPS[name] || 1) {
-  return `<div class="stepper">
-    <button type="button" class="step" data-step="${name}" data-delta="${-step}"${value <= min ? ' disabled' : ''} aria-label="−${step}" data-testid="${name}-minus">−</button>
+// `disabled`: el contador se ve pero no se toca (su valor no aplica ahora).
+function stepper (name, value, shown, [min, max] = RANGES[name], step = STEPS[name] || 1, disabled = false) {
+  return `<div class="stepper${disabled ? ' off' : ''}">
+    <button type="button" class="step" data-step="${name}" data-delta="${-step}"${disabled || value <= min ? ' disabled' : ''} aria-label="−${step}" data-testid="${name}-minus">−</button>
     <output data-testid="${name}-value">${esc(shown)}</output>
-    <button type="button" class="step" data-step="${name}" data-delta="${step}"${value >= max ? ' disabled' : ''} aria-label="+${step}" data-testid="${name}-plus">+</button>
+    <button type="button" class="step" data-step="${name}" data-delta="${step}"${disabled || value >= max ? ' disabled' : ''} aria-label="+${step}" data-testid="${name}-plus">+</button>
   </div>`
 }
 
@@ -389,17 +396,17 @@ function scoringBody (s) {
     const last = x.on && on.length === 1
     return `<div class="scoring-row">
       <button type="button" class="seg-btn toggle${x.on ? ' on' : ''}" data-toggle-scoring="${k}" aria-pressed="${x.on}"${last ? ' disabled' : ''} data-testid="scoring-${k}">${esc(t('scoring_' + k))}</button>
-      ${x.on ? `<span class="scoring-amount">${stepper('points-' + k, x.points, String(x.points), RANGES.points)}<span class="unit">${esc(t('unit_points'))}</span></span>` : ''}
+      <span class="scoring-amount">${stepper('points-' + k, x.points, String(x.points), RANGES.points, undefined, !x.on)}<span class="unit">${esc(t('unit_points'))}</span></span>
     </div>`
   }).join('')}</div>`
 }
 
+// Los dos valores a la vista; el del modo que no está elegido, deshabilitado.
 function matchEndBody (s) {
   const time = s.matchEnd === 'time'
-  const amount = time
-    ? stepper('matchMinutes', s.matchMinutes, String(s.matchMinutes)) + `<span class="unit">${esc(t('unit_minutes'))}</span>`
-    : stepper('gamesPerMatch', s.gamesPerMatch, s.gamesPerMatch ? String(s.gamesPerMatch) : t('free')) + `<span class="unit">${esc(tn('unit_games', s.gamesPerMatch))}</span>`
-  return seg('matchEnd', [['time', 'matchEndTime'], ['games', 'matchEndGames']], s.matchEnd) + `<div class="row">${amount}</div>`
+  return seg('matchEnd', [['time', 'matchEndTime'], ['games', 'matchEndGames']], s.matchEnd) +
+    `<div class="row">${stepper('matchMinutes', s.matchMinutes, String(s.matchMinutes), undefined, undefined, !time)}<span class="unit">${esc(t('unit_minutes'))}</span></div>` +
+    `<div class="row">${stepper('gamesPerMatch', s.gamesPerMatch, s.gamesPerMatch ? String(s.gamesPerMatch) : t('free'), undefined, undefined, time)}<span class="unit">${esc(tn('unit_games', s.gamesPerMatch))}</span></div>`
 }
 
 function matchEndSummary (s) {
@@ -425,10 +432,23 @@ function estimateText (tour, s) {
   return t(est.exact ? 'estimateExact' : 'estimate', est) + (s.matchEnd === 'time' ? ' · ' + t('estimateMinutes', { n: est.rounds * s.matchMinutes }) : '')
 }
 
-function limitEditor (s, estimateText) {
-  return seg('limitType', [['perPlayer', 'limitPerPlayer'], ['rounds', 'limitRounds'], ['matches', 'limitMatches']], s.limitType) +
-    `<div class="row">${stepper('limitValue', s.limitValue, String(s.limitValue))}<span class="unit">${esc(tn('unit_' + s.limitType, s.limitValue))}</span></div>` +
+// «Con todos» / «Todos contra todos» no lleva número: sale de los jugadores del torneo, así
+// que el contador se ve deshabilitado con los partidos que le tocan a cada uno.
+function limitEditor (tour, s, estimateText) {
+  const everyone = s.limitType === 'everyone'
+  const each = everyone ? engine.everyoneMatchesEach({ ...tour, settings: s }) : null
+  const value = everyone ? (each ?? 0) : s.limitValue
+  return seg('limitType', [['perPlayer', 'limitPerPlayer'], ['rounds', 'limitRounds'], ['matches', 'limitMatches'], ['everyone', 'limitEveryone_' + s.partners]], s.limitType) +
+    `<div class="row">${stepper('limitValue', value, everyone && each == null ? '—' : String(value), undefined, undefined, everyone)}<span class="unit">${esc(tn(everyone ? 'unit_perPlayer' : 'unit_' + s.limitType, value))}</span></div>` +
     `<p class="hint" data-testid="estimate">${esc(estimateText)}</p>`
+}
+
+// La duración en una frase: «3 partidos cada uno», «Con todos · 7 partidos cada uno».
+function limitSummary (tour, s) {
+  if (s.limitType !== 'everyone') return `${s.limitValue} ${tn('unit_' + s.limitType, s.limitValue)}`
+  const name = t('limitEveryone_' + s.partners)
+  const each = engine.everyoneMatchesEach({ ...tour, settings: s })
+  return each == null ? name : `${name} · ${each} ${tn('unit_perPlayer', each)}`
 }
 
 const nameInput = (tour, pid) => `<input class="input roster-name" data-rename="${pid}" data-focus-key="rename-${pid}"
@@ -481,7 +501,7 @@ function rulesChips (tour, s) {
     [t('partnersSummary_' + s.partners)],
     [t('pairingSummary_' + s.pairing)],
     [tn('courtsCount', s.courts), over],
-    [`${s.limitValue} ${tn('unit_' + s.limitType, s.limitValue)}`],
+    [limitSummary(tour, s)],
     [scoringSummary(s)],
     [matchEndSummary(s)]
   ].map(([text, warn]) => `<span${warn ? ' class="warn-text"' : ''}>${esc(text)}</span>`).join('')
@@ -497,10 +517,8 @@ function rulesetOption (tour, set, selected) {
       <span class="ruleset-rules">${rulesChips(tour, set.settings)}</span>
       ${blocked ? `<span class="hint">${esc(t('rulesetBlocked'))}</span>` : ''}
     </button>
-    ${set.builtin || !set.id
-      ? ''
-      : `<button type="button" class="icon-btn" data-action="delete-ruleset" data-ruleset-id="${esc(set.id)}"
-          aria-label="${esc(t('rulesetDelete', { name }))}" data-testid="delete-ruleset">✕</button>`}
+    <button type="button" class="icon-btn" data-action="delete-ruleset" data-ruleset-id="${esc(set.id)}"
+      aria-label="${esc(t('rulesetDelete', { name }))}" data-testid="delete-ruleset"${set.builtin || !set.id ? ' disabled' : ''}>✕</button>
   </div>`
 }
 
@@ -524,10 +542,11 @@ function rulesChoiceHtml (tour) {
 }
 
 // El formulario parte de las reglas elegidas, y `source` dice de dónde salen:
-//   'set'     un set del usuario: «Guardar» lo edita y «Borrar» lo borra; lleva su nombre.
+//   'set'     un set del usuario: «Guardar» lo edita; lleva su nombre.
 //   'own'     las reglas propias del torneo (su set ya no existe): «Guardar» las cambia en
-//             el torneo; no hay set que borrar.
-//   'builtin' de fábrica: no se editan ni se borran, solo se guardan como nuevas.
+//             el torneo.
+//   'builtin' de fábrica: no se editan, solo se guardan como nuevas.
+// Borrar no es cosa del formulario: cada set guardado lleva su ✕ en la lista.
 // «Guardar como nuevas» sirve siempre; fuera de 'set' el nombre propone una copia.
 function formFrom (set, settings) {
   const source = !set ? 'own' : set.builtin ? 'builtin' : 'set'
@@ -550,22 +569,26 @@ function rulesFormHtml (tour) {
   const est = estimateText(tour, s)
   const over = courtsOver(tour, s)
   const builtin = f.source === 'builtin'
+  // Reglas que chocan: se pueden elegir, pero se marcan en rojo con el porqué y no se guarda.
+  const conflicts = engine.settingsConflicts(s)
+  const clash = key => (conflicts.includes(key)
+    ? { note: t('conflictRankedEveryone', { limit: t('limitEveryone_' + s.partners) }), warn: true }
+    : {})
   return `<section class="rules-form" data-testid="rules-form">
     <h3>${esc(t('rulesFormEditH'))}</h3>
     ${builtin ? `<p class="hint" data-testid="builtin-note">${esc(t('rulesetBuiltinNote'))}</p>` : ''}
     ${rule('rulesetName', f.name, () => `<input id="rulesetName" class="input" data-field="rulesetName" data-focus-key="rulesetName"
         maxlength="40" autocomplete="off" value="${esc(f.name)}" aria-label="${esc(t('rulesetName'))}" data-testid="ruleset-name">`)}
     ${rule('partners', t(PARTNER_LABELS[s.partners]), () => seg('partners', [['rotating', 'partnersRotating'], ['fixed', 'partnersFixed']], s.partners))}
-    ${rule('pairing', t(PAIRING_LABELS[s.pairing]), () => seg('pairing', [['random', 'pairingRandom'], ['ranked', 'pairingRanked']], s.pairing))}
+    ${rule('pairing', t(PAIRING_LABELS[s.pairing]), () => seg('pairing', [['random', 'pairingRandom'], ['ranked', 'pairingRanked']], s.pairing), clash('pairing'))}
     ${rule('courts', tn('courtsCount', s.courts), () => stepper('courts', s.courts, String(s.courts)), { note: over, warn: Boolean(over) })}
-    ${rule('limit', `${s.limitValue} ${tn('unit_' + s.limitType, s.limitValue)}${est ? ' · ' + est : ''}`, () => limitEditor(s, est))}
+    ${rule('limit', `${limitSummary(tour, s)}${est ? ' · ' + est : ''}`, () => limitEditor(tour, s, est), clash('limit'))}
     ${rule('scoring', scoringSummary(s), () => scoringBody(s))}
     ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}
+    ${conflicts.length ? `<p class="hint warn-text" data-testid="rules-conflict">${esc(t('rulesConflictSave'))}</p>` : ''}
     <div class="actions">
-      <button type="button" class="btn-primary" data-action="update-ruleset" data-testid="update-ruleset"${builtin ? ' disabled' : ''}>${esc(t('rulesetUpdate'))}</button>
-      <button type="button" class="btn" data-action="save-ruleset" data-testid="save-ruleset">${esc(t('rulesetSaveNew'))}</button>
-      <button type="button" class="btn danger" data-action="delete-ruleset" data-ruleset-id="${esc(f.baseId || '')}"
-        data-testid="remove-ruleset"${f.source === 'set' ? '' : ' disabled'}>${esc(t('rulesetDeleteBtn'))}</button>
+      <button type="button" class="btn-primary" data-action="update-ruleset" data-testid="update-ruleset"${builtin || conflicts.length ? ' disabled' : ''}>${esc(t('rulesetUpdate'))}</button>
+      <button type="button" class="btn" data-action="save-ruleset" data-testid="save-ruleset"${conflicts.length ? ' disabled' : ''}>${esc(t('rulesetSaveNew'))}</button>
     </div>
   </section>`
 }

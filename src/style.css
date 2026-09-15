@@ -123,7 +123,9 @@ dotrino-topbar {
 }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn-primary:active { background: var(--accent-strong); }
-.btn-primary[disabled], .btn[disabled] { opacity: .45; cursor: default; }
+.btn-primary[disabled], .btn[disabled], .btn-small[disabled], .icon-btn[disabled] { opacity: .45; cursor: default; }
+.edit-name[disabled] { opacity: .35; cursor: default; }
+.stepper.off output { opacity: .45; }
 .btn-primary.block { width: 100%; }
 .btn-primary.danger, .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn:active { background: var(--surface-2); }

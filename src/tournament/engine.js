@@ -23,7 +23,10 @@ export const MIN_TEAMS = 3 // parejas fijas: con dos no hay torneo, hay un parti
 
 const PARTNERS = ['rotating', 'fixed']
 const PAIRINGS = ['random', 'ranked']
-const LIMITS = ['perPlayer', 'rounds', 'matches']
+// 'everyone' no lleva número: sale de los jugadores. Si las parejas son fijas, cada pareja
+// juega una vez contra cada otra (todos contra todos); si rotan, cada jugador hace pareja
+// una vez con cada uno de los demás (con todos).
+const LIMITS = ['perPlayer', 'rounds', 'matches', 'everyone']
 const MATCH_ENDS = ['time', 'games']
 export const SCORE_KINDS = ['games', 'sets', 'match']
 const MINUTE = 60000
@@ -78,6 +81,15 @@ export function checkSettings (s) {
   if (!MATCH_ENDS.includes(s.matchEnd)) throw new Error(`unknown match end: ${s.matchEnd}`)
   if (!Number.isInteger(s.matchMinutes) || s.matchMinutes < 1) throw new Error(`invalid match minutes: ${s.matchMinutes}`)
   if (!Number.isInteger(s.gamesPerMatch) || s.gamesPerMatch < 0) throw new Error(`invalid games per match: ${s.gamesPerMatch}`)
+  const conflicts = settingsConflicts(s)
+  if (conflicts.length) throw new Error(`conflicting rules: ${conflicts.join(', ')}`)
+}
+
+// Reglas que no se combinan, por la clave de cada regla que choca. «Por puntaje» empareja
+// por la tabla (1.º+4.º contra 2.º+3.º), así que los de arriba y los de abajo casi no se
+// cruzan: con «todos contra todos» / «con todos» el torneo no terminaría.
+export function settingsConflicts (s) {
+  return s.pairing === 'ranked' && s.limitType === 'everyone' ? ['pairing', 'limit'] : []
 }
 
 // ---------- construcción ----------
@@ -213,7 +225,29 @@ export function limitReached (t, h = history(t)) {
     const units = activeUnits(t)
     return units.length > 0 && units.every(u => count(h.appearances, u) >= limitValue)
   }
+  if (limitType === 'everyone') return pendingPairs(t, h).length === 0
   throw new Error(`unknown limit type: ${limitType}`)
+}
+
+// Para 'everyone': los pares de unidades activas que todavía no coincidieron. Si las
+// parejas rotan, coincidir es haber jugado JUNTOS; si son fijas, haberse ENFRENTADO.
+function pendingPairs (t, h) {
+  const units = activeUnits(t)
+  const met = isFixed(t) ? h.opponents : h.partners
+  const out = []
+  for (let i = 0; i < units.length; i++) {
+    for (let j = i + 1; j < units.length; j++) {
+      if (!count(met, key(units[i], units[j]))) out.push([units[i], units[j]])
+    }
+  }
+  return out
+}
+
+// Partidos que le tocan a cada uno con 'everyone' y las unidades de ahora: uno por cada
+// otro jugador (o pareja). null si no hay con quién.
+export function everyoneMatchesEach (t) {
+  const n = activeUnits(t).length
+  return n >= 2 ? n - 1 : null
 }
 
 // Por qué no se puede generar otra ronda, o null si se puede.
@@ -247,7 +281,11 @@ export function estimate (t) {
   }
   let left
   if (limitType === 'matches') left = Math.max(0, limitValue - done)
-  else {
+  else if (limitType === 'everyone') {
+    // Un partido cubre un par si las parejas son fijas (el enfrentamiento) y dos si rotan
+    // (las dos parejas). Es el mínimo: si no encajan justos, alguien repite.
+    left = Math.ceil(pendingPairs(t, history(t)).length / (isFixed(t) ? 1 : 2))
+  } else {
     const h = history(t)
     const deficit = units.reduce((n, u) => n + Math.max(0, limitValue - count(h.appearances, u)), 0)
     left = Math.ceil(deficit / slots)
@@ -403,6 +441,7 @@ export function generateRound (t, rng = Math.random) {
   checkSettings(t.settings)
   if (nextRoundBlocker(t)) return null
   const h = history(t)
+  if (t.settings.limitType === 'everyone') return everyoneRound(t, h, rng)
   const units = activeUnits(t)
   const slots = slotsPerMatch(t)
   const courts = courtsInUse(t)
@@ -438,12 +477,137 @@ export function generateRound (t, rng = Math.random) {
       groups.push({ a: [arr[i], arr[i + 1]], b: [arr[i + 2], arr[i + 3]], teams: null })
     }
   }
+  return makeRound(groups, rest)
+}
+
+function makeRound (groups, rest) {
   return {
     id: newId(),
     matches: groups.map((g, i) => ({ id: newId(), court: i + 1, ...g, score: null, sets: null })),
     rest,
     clock: null
   }
+}
+
+// ---------- todos contra todos / con todos ----------
+
+const PLAN_BUDGET = 60000 // pasos de búsqueda por ronda; agotados, la ronda se arma a lo voraz
+const PLAN_EXTRA_ROUNDS = 2 // rondas de más que se prueban antes de rendirse
+
+// Reparte los pares pendientes en rondas de a lo sumo `cap` pares, buscando terminar en el
+// mínimo de rondas, y devuelve los pares de la PRIMERA. Las siguientes se vuelven a calcular
+// cuando toquen: entre medias pueden cambiar jugadores o canchas.
+//
+// La poda que lo hace posible: nadie cubre más de un par por ronda, así que quien tiene
+// tantos pendientes como rondas quedan juega esta sí o sí, y quien tiene más ya no llega.
+function planFirstRound (units, pending, cap, rng) {
+  const adj = new Map(units.map(u => [u, new Set()]))
+  for (const [x, y] of pending) { adj.get(x).add(y); adj.get(y).add(x) }
+  const degree = u => adj.get(u).size
+  let edgesLeft = pending.length
+  let budget = PLAN_BUDGET
+
+  function fill (rounds, used, chosen) {
+    if (--budget < 0) return null
+    const free = u => !used.has(u)
+    if (units.some(u => free(u) && degree(u) > rounds)) return null
+    const mustPlay = units.filter(u => free(u) && degree(u) === rounds)
+    const open = units.filter(u => free(u) && [...adj.get(u)].some(free))
+    if (chosen.length === cap || !open.length) {
+      if (mustPlay.length) return null
+      if (edgesLeft === 0) return chosen.slice()
+      if (rounds === 1 || edgesLeft > (rounds - 1) * cap) return null
+      return fill(rounds - 1, new Set(), []) ? chosen.slice() : null
+    }
+    // El más apretado primero: alguien que tiene que jugar, o el de más pendientes.
+    const v = shuffle(mustPlay.length ? mustPlay : open, rng).reduce((a, b) => (degree(b) > degree(a) ? b : a))
+    const partners = shuffle([...adj.get(v)].filter(free), rng).sort((a, b) => degree(b) - degree(a))
+    for (const w of partners) {
+      adj.get(v).delete(w); adj.get(w).delete(v); edgesLeft--
+      used.add(v); used.add(w); chosen.push([v, w])
+      const res = fill(rounds, used, chosen)
+      chosen.pop(); used.delete(v); used.delete(w)
+      adj.get(v).add(w); adj.get(w).add(v); edgesLeft++
+      if (res) return res
+      if (budget < 0) return null
+    }
+    // Que v no juegue esta ronda, si no está obligado.
+    if (degree(v) === rounds) return null
+    used.add(v)
+    const res = fill(rounds, used, chosen)
+    used.delete(v)
+    return res
+  }
+
+  const lower = Math.max(Math.ceil(pending.length / cap), ...units.map(degree))
+  for (let rounds = lower; rounds <= lower + PLAN_EXTRA_ROUNDS && budget > 0; rounds++) {
+    const first = fill(rounds, new Set(), [])
+    if (first) return first
+  }
+  return greedyPairs(units, adj, cap, rng)
+}
+
+// Sin plan a tiempo: los pares de la ronda a lo voraz, empezando por quien más pendientes
+// tiene. El torneo termina igual (cada ronda cubre al menos un par), con alguna ronda de más.
+function greedyPairs (units, adj, cap, rng) {
+  const used = new Set()
+  const out = []
+  const degree = u => adj.get(u).size
+  const most = list => list.reduce((a, b) => (degree(b) > degree(a) ? b : a))
+  while (out.length < cap) {
+    const open = shuffle(units.filter(u => !used.has(u) && [...adj.get(u)].some(w => !used.has(w))), rng)
+    if (!open.length) break
+    const v = most(open)
+    const w = most(shuffle([...adj.get(v)].filter(x => !used.has(x)), rng))
+    used.add(v); used.add(w); out.push([v, w])
+  }
+  return out
+}
+
+function opponentCost (arr, h) {
+  let c = 0
+  for (let i = 0; i < arr.length; i += 2) {
+    for (const x of arr[i]) {
+      for (const y of arr[i + 1]) {
+        const o = count(h.opponents, key(x, y))
+        c += o * o
+      }
+    }
+  }
+  return c
+}
+
+// Una ronda de 'everyone'. Juegan los pares que el plan pone en la primera ronda. Si las
+// parejas rotan, cada par es una pareja, y las parejas se enfrentan repitiendo rival lo
+// menos posible; una pareja sin rival se completa con dos de los que descansarían, de los
+// que menos jugaron.
+function everyoneRound (t, h, rng) {
+  const units = activeUnits(t)
+  const fixed = isFixed(t)
+  const courts = courtsInUse(t)
+  const pairs = planFirstRound(units, pendingPairs(t, h), fixed ? courts : courts * 2, rng)
+  let groups
+  if (fixed) {
+    const team = id => t.teams.find(x => x.id === id)
+    groups = pairs.map(([x, y]) => ({ a: team(x).players.slice(), b: team(y).players.slice(), teams: [x, y] }))
+  } else {
+    const teams = pairs.map(p => p.slice())
+    if (teams.length % 2) {
+      const used = new Set(teams.flat())
+      const free = shuffle(units.filter(u => !used.has(u)), rng)
+        .sort((x, y) => count(h.appearances, x) - count(h.appearances, y))
+      // Con a lo sumo dos parejas por cancha nunca faltan: si falta, el cálculo está mal.
+      if (free.length < 2) throw new Error('no players left to complete the last match')
+      const [f1, ...others] = free
+      const f2 = others.reduce((a, b) => (count(h.partners, key(f1, b)) < count(h.partners, key(f1, a)) ? b : a))
+      teams.push([f1, f2])
+    }
+    const arr = bestArrangement(teams, a => opponentCost(a, h), rng)
+    groups = []
+    for (let i = 0; i < arr.length; i += 2) groups.push({ a: arr[i], b: arr[i + 1], teams: null })
+  }
+  const playing = new Set(groups.flatMap(g => (fixed ? g.teams : [...g.a, ...g.b])))
+  return makeRound(shuffle(groups, rng), units.filter(u => !playing.has(u)))
 }
 
 // ---------- ediciones ----------

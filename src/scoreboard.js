@@ -260,7 +260,8 @@ function renderLink () {
   const l = state.link
   $('linkedBar').hidden = !l
   $('btnNew').textContent = l ? t('saveResult') : t('newMatch')
-  for (const b of document.querySelectorAll('.edit-name')) b.hidden = !!l
+  // Jugando un partido del torneo los nombres vienen del torneo: el lápiz se deshabilita.
+  for (const b of document.querySelectorAll('.edit-name')) b.disabled = !!l
   if (l) $('linkedLabel').textContent = linkLabel(Date.now())
   $('nameLeft').placeholder = t('teamA')
   $('nameRight').placeholder = t('teamB')

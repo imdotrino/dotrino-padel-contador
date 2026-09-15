@@ -5,7 +5,8 @@ import {
   setScore, nextRoundBlocker, redoLastRound, setPartners, removePlayer, removeTeam,
   appearances, hasResults, defaultSettings, SCORE_KINDS, setSets, outcome, toggleScoring,
   clockOf, startClock, pauseClock, resumeClock, resetClock, formatClock, migrateTournament,
-  maxCourts, courtsInUse, builtinRulesets, applyRules, canApplyRules, checkSettings
+  maxCourts, courtsInUse, builtinRulesets, applyRules, canApplyRules, checkSettings,
+  settingsConflicts, everyoneMatchesEach
 } from '../src/tournament/engine.js'
 
 // Azar con semilla, para que un fallo se pueda repetir.
@@ -383,4 +384,92 @@ test('estimate', () => {
 test('unknown settings fail loudly', () => {
   const t = withPlayers(4, { limitType: 'forever' })
   assert.throws(() => generateRound(t), /unknown limit type/)
+})
+
+// ---------- todos contra todos / con todos ----------
+
+test('everyone, rotating: 8 players on 2 courts is a perfect Super 8 (7 rounds, each partner once)', () => {
+  for (let seed = 1; seed <= 10; seed++) {
+    const t = withPlayers(8, { courts: 2, limitType: 'everyone' })
+    assert.deepEqual(estimate(t), { matches: 14, rounds: 7, exact: false })
+    assert.equal(everyoneMatchesEach(t), 7)
+    playAll(t, seeded(seed))
+    assert.equal(t.rounds.length, 7, `seed ${seed}`)
+    const pc = partnerCounts(t)
+    assert.equal(pc.size, 28)
+    assert.ok([...pc.values()].every(n => n === 1), `seed ${seed} repeated a partner`)
+    const ap = appearances(t)
+    for (const p of t.players) assert.equal(ap.get(p.id), 7)
+    assert.equal(status(t).finished, true)
+  }
+})
+
+test('everyone, rotating: 9 players on 2 courts partner everyone once and each rests once', () => {
+  for (let seed = 1; seed <= 10; seed++) {
+    const t = withPlayers(9, { courts: 2, limitType: 'everyone' })
+    playAll(t, seeded(seed))
+    assert.equal(t.rounds.length, 9, `seed ${seed}`)
+    const pc = partnerCounts(t)
+    assert.equal(pc.size, 36)
+    assert.ok([...pc.values()].every(n => n === 1), `seed ${seed} repeated a partner`)
+    assert.ok(t.rounds.every(r => r.rest.length === 1))
+  }
+})
+
+test('everyone, fixed: every pair plays every other pair exactly once, in the fewest rounds', () => {
+  for (const [teams, courts, rounds] of [[4, 2, 3], [5, 2, 5], [6, 3, 5], [8, 4, 7]]) {
+    for (let seed = 1; seed <= 5; seed++) {
+      const t = createTournament({ settings: { partners: 'fixed', courts, limitType: 'everyone' } })
+      for (let i = 0; i < teams; i++) addTeam(t, 'A' + i, 'B' + i)
+      playAll(t, seeded(seed))
+      const faced = new Map()
+      for (const r of t.rounds) {
+        for (const m of r.matches) {
+          const k = m.teams.slice().sort().join('|')
+          faced.set(k, (faced.get(k) || 0) + 1)
+        }
+      }
+      assert.equal(faced.size, teams * (teams - 1) / 2, `${teams} teams, seed ${seed}`)
+      assert.ok([...faced.values()].every(n => n === 1), `${teams} teams, seed ${seed}: repeated a matchup`)
+      assert.equal(t.rounds.length, rounds, `${teams} teams, seed ${seed}`)
+    }
+  }
+})
+
+test('everyone with an odd number of partnerships still ends with everyone partnered', () => {
+  // 6 jugadores: 15 parejas posibles; cada partido cubre dos, así que una se repite.
+  const t = withPlayers(6, { courts: 1, limitType: 'everyone' })
+  playAll(t, seeded(3))
+  assert.equal(partnerCounts(t).size, 15)
+  assert.equal(status(t).finished, true)
+  assert.equal(t.rounds.length, 8)
+})
+
+test('everyone: a player who joins midway is partnered with everyone too', () => {
+  const t = withPlayers(8, { courts: 2, limitType: 'everyone' })
+  const rng = seeded(4)
+  t.rounds.push(generateRound(t, rng))
+  const late = addPlayer(t, 'Late')
+  playAll(t, rng)
+  const pc = partnerCounts(t)
+  for (const p of t.players) {
+    if (p.id !== late.id) assert.ok(pc.has([p.id, late.id].sort().join('|')), `${p.name} never partnered Late`)
+  }
+  assert.equal(pc.size, 36)
+})
+
+test('everyone with 16 players on 4 courts finishes quickly and covers every partnership', () => {
+  const started = Date.now()
+  const t = withPlayers(16, { courts: 4, limitType: 'everyone' })
+  playAll(t, seeded(1))
+  assert.equal(partnerCounts(t).size, 120)
+  assert.ok(Date.now() - started < 5000, `took ${Date.now() - started} ms`)
+})
+
+test('everyone and ranked do not combine', () => {
+  const clash = { ...defaultSettings(), pairing: 'ranked', limitType: 'everyone' }
+  assert.deepEqual(settingsConflicts(clash), ['pairing', 'limit'])
+  assert.throws(() => checkSettings(clash), /conflicting rules/)
+  assert.deepEqual(settingsConflicts({ ...defaultSettings(), limitType: 'everyone' }), [])
+  assert.deepEqual(settingsConflicts({ ...defaultSettings(), pairing: 'ranked' }), [])
 })

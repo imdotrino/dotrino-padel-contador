@@ -22,9 +22,8 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     assert.equal(await chosen.count(), 1)
     assert.match(await chosen.textContent(), /Americano por tiempo[\s\S]*Por tiempo · 20 minutos/)
     assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Americano por tiempo (copia)')
-    // Los tres botones están siempre; con reglas de fábrica, Guardar y Borrar no se pueden.
+    // Los dos botones están siempre; con reglas de fábrica, Guardar no se puede.
     assert.equal(await page.isDisabled('[data-testid="update-ruleset"]'), true, 'built-in rules are not edited')
-    assert.equal(await page.isDisabled('[data-testid="remove-ruleset"]'), true, 'built-in rules are not deleted')
     assert.equal(await page.isEnabled('[data-testid="save-ruleset"]'), true)
     assert.equal(await page.isVisible('[data-testid="matchMinutes-minus"]'), false, 'options stay closed until Edit')
 
@@ -53,15 +52,30 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     await page.click('[data-testid="save-ruleset"]')
     assert.match(await page.textContent('#toast'), /Ya hay unas reglas con ese nombre/)
     assert.equal(await option('Rápido').count(), 1)
-    // Borrarlo desde el formulario: el torneo conserva sus reglas (5 minutos) como propias,
-    // que se pueden guardar pero no borrar.
-    assert.equal(await page.isEnabled('[data-testid="remove-ruleset"]'), true)
-    await page.click('[data-testid="remove-ruleset"]')
+    // Reglas que chocan: «Por puntaje» con «Con todos» se marcan en rojo y no se guarda.
+    await page.click('[data-testid="edit-pairing"]')
+    await page.click('[data-testid="pairing-ranked"]')
+    await page.click('[data-testid="edit-limit"]')
+    await page.click('[data-testid="limitType-everyone"]')
+    assert.equal(await page.locator('[data-testid="rule-pairing"].warn').count(), 1)
+    assert.equal(await page.locator('[data-testid="rule-limit"].warn').count(), 1)
+    assert.equal(await page.isDisabled('[data-testid="update-ruleset"]'), true, 'conflicting rules are not saved')
+    assert.equal(await page.isDisabled('[data-testid="save-ruleset"]'), true, 'conflicting rules are not saved as new')
+    assert.match(await page.textContent('[data-testid="rules-conflict"]'), /no se combinan/)
+    await page.click('[data-testid="limitType-perPlayer"]')
+    await page.click('[data-testid="edit-pairing"]')
+    await page.click('[data-testid="pairing-random"]')
+    assert.equal(await page.locator('[data-testid="rules-conflict"]').count(), 0)
+    // Cada set guardado se borra con su ✕ de la lista (deshabilitado si no hay set que
+    // borrar): el torneo conserva sus reglas (5 minutos) como propias, que se pueden guardar.
+    const del = name => page.locator('.ruleset-row', { has: option(name) }).locator('[data-testid="delete-ruleset"]')
+    assert.equal(await del('Americano por tiempo').isDisabled(), true, 'built-in rules are not deleted')
+    await del('Rápido').click()
     await page.click('[data-testid="dialog-ok"]')
     await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Reglas de este torneo")')
     assert.equal(await option('Rápido').count(), 0)
     assert.match(await chosen.textContent(), /Por tiempo · 5 minutos/)
-    assert.equal(await page.isDisabled('[data-testid="remove-ruleset"]'), true, 'own rules have no set to delete')
+    assert.equal(await del('Reglas de este torneo').isDisabled(), true, 'own rules have no set to delete')
     await page.click('[data-testid="update-ruleset"]')
     assert.match(await page.textContent('#toast'), /Reglas de este torneo actualizadas/)
     await page.click('[data-testid="start-tournament"]')
