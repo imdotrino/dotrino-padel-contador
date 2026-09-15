@@ -16,8 +16,9 @@ npm install
 npm run dev      # http://localhost:3210
 npm test         # motor del torneo (node --test, sin navegador)
 npm run test:e2e # Playwright: maquetación en 9 tamaños (nada encimado, torneo a lo ancho),
-                 # cronómetro (con reloj controlado) y puntos combinables; sirve dist/ bajo
-                 # padel.dotrino.com (necesita red)
+                 # sets de reglas, cronómetro (con reloj controlado) y puntos combinables;
+                 # sirve dist/ bajo padel.dotrino.com (necesita red). Corre EN SERIE: con dos
+                 # navegadores a la vez, el store a veces no contesta en 8 s (2 de 8 pasadas).
 npm run build    # dist/
 ```
 

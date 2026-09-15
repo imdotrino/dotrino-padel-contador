@@ -32,16 +32,28 @@ export async function openApp (browser, { width, height, mobile = false, clock =
   })
   const page = await ctx.newPage()
   const errors = []
+  const console = []
   page.on('pageerror', e => errors.push(e.message))
+  page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.push(`${m.type()}: ${m.text()}`) })
+  consoleOf.set(page, console)
   if (clock) await page.clock.install()
   await page.goto(`${ORIGIN}/`)
   return { ctx, page, errors }
 }
 
+// Lo que la página dejó en la consola: va en el error cuando algo no aparece, para que
+// un fallo diga qué pasó y no solo «timeout».
+const consoleOf = new WeakMap()
+
 // Un torneo nuevo, sin empezar, con esos jugadores; la página queda en «Torneo».
 export async function newTournament (page, players) {
   await page.click('[data-testid="tab-setup"]')
-  await page.click('#setupPage [data-testid="new-tournament"]', { timeout: 30000 })
+  try {
+    await page.click('#setupPage [data-testid="new-tournament"]', { timeout: 30000 })
+  } catch (e) {
+    const shown = (await page.textContent('#setupPage')).trim().slice(0, 200)
+    throw new Error(`the tournament page never offered «new tournament»: it shows «${shown}»; console: ${JSON.stringify(consoleOf.get(page))}`, { cause: e })
+  }
   for (const name of players) {
     await page.fill('[data-testid="add-player"]', name)
     await page.press('[data-testid="add-player"]', 'Enter')
