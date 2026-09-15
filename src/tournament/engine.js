@@ -56,7 +56,7 @@ export function defaultSettings () {
     // Cómo termina un partido. 'time': el cronómetro de la ronda, y al acabarse vale el
     // marcador que haya. 'games': cuando un lado llega a `gamesPerMatch` (0 = libre).
     matchEnd: 'time',
-    matchMinutes: 20,
+    matchMinutes: 12, // dueño, 2026-09-15
     gamesPerMatch: 6
   }
 }
@@ -795,8 +795,8 @@ export function migrateSettings (s) {
   }
   if (s.matchEnd === undefined) s.matchEnd = 'games'
   if (s.matchMinutes === undefined) s.matchMinutes = defaultSettings().matchMinutes
-  // Migración del 2026-09-15: antes de «auto» las canchas eran siempre un número fijo, y lo
-  // guardado lo sigue siendo. Se puede quitar cuando no queden datos de antes de esa fecha.
+  // MIGRACIÓN (se quita el 2026-10-15): antes de «auto» las canchas eran siempre un número
+  // fijo, y lo guardado lo sigue siendo. Prueba: «settings saved before auto courts…».
   if (s.courtsMode === undefined) s.courtsMode = 'fixed'
   checkSettings(s)
   return s

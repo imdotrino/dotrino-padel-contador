@@ -20,12 +20,12 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     const exact = name => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
     const option = name => page.locator('[data-testid="ruleset"]', { has: page.locator('.ruleset-name', { hasText: exact(name) }) })
 
-    // Una sola regla de fábrica, «Default» (20 minutos): un torneo nuevo arranca con ella, el
+    // Una sola regla de fábrica, «Default» (12 minutos): un torneo nuevo arranca con ella, el
     // formulario lleva su nombre sin «(copia)», y no se guarda ni se borra, y se dice por qué.
     const del = name => page.locator('.ruleset-row', { has: option(name) }).locator('[data-testid="delete-ruleset"]')
     assert.equal(await chosen.count(), 1)
     assert.equal(await page.locator('[data-testid="ruleset"]').count(), 1, 'one built-in')
-    assert.match(await chosen.textContent(), /Default[\s\S]*Por tiempo · 20 minutos/)
+    assert.match(await chosen.textContent(), /Default[\s\S]*Por tiempo · 12 minutos/)
     assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Default')
     assert.equal(await page.isDisabled('[data-testid="update-ruleset"]'), true, 'the built-in is not edited')
     assert.equal(await page.isEnabled('[data-testid="save-ruleset"]'), true)
@@ -56,7 +56,7 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     assert.equal(await page.textContent('[data-testid="rule-matchEnd-text"]'), 'Por tiempo · 10 minutos')
     // Editarlo a 5 y «Guardar»: se actualiza ese mismo, no aparece otro.
     await page.click('[data-testid="edit-matchEnd"]')
-    await page.click('[data-testid="matchMinutes-minus"]')
+    for (let i = 0; i < 5; i++) await page.click('[data-testid="matchMinutes-minus"]') // de 1 en 1: 10 → 5
     await page.click('[data-testid="update-ruleset"]')
     await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Por tiempo · 5 minutos")')
     assert.equal(await option('Rápido').count(), 1)

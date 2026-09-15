@@ -21,7 +21,9 @@ let openRule = null // la regla que se está editando, una a la vez
 let ruleForm = null // { source, baseId, name, settings }: el formulario de abajo (editar el set elegido o crear uno a partir de él)
 
 const RANGES = { courts: [1, 20], limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
-const STEPS = { matchMinutes: 5 }
+// Los minutos van de 1 en 1: el valor por defecto (12) no es múltiplo de 5, y de 5 en 5 no
+// se podría volver a él.
+const STEPS = { matchMinutes: 1 }
 const LABELS = { name: 'name', rulesetName: 'rulesetName', partners: 'partners', pairing: 'pairing', courts: 'courts', limit: 'limit', scoring: 'scoring', matchEnd: 'matchEnd' }
 const INFOS = new Set(['partners', 'pairing', 'courts', 'limit', 'scoring', 'matchEnd'])
 const PARTNER_LABELS = { rotating: 'partnersRotating', fixed: 'partnersFixed' }

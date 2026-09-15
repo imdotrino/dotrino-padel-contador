@@ -221,7 +221,7 @@ test('matches end on time by default; the round clock runs, pauses and ends on i
   t.rounds.push(r)
   const T = 1_000_000
   const MIN = 60000
-  assert.deepEqual(clockOf(t, r, T), { state: 'idle', remainingMs: 20 * MIN, minutes: 20 })
+  assert.deepEqual(clockOf(t, r, T), { state: 'idle', remainingMs: 12 * MIN, minutes: 12 }) // 12 por defecto
   t.settings.matchMinutes = 10 // antes de empezar: cuenta
   startClock(t, r.id, T)
   t.settings.matchMinutes = 30 // ya empezado: no cuenta
@@ -502,7 +502,7 @@ test('courts: auto (the default) uses players / 4, or pairs / 2, and grows with 
   assert.throws(() => checkSettings({ ...defaultSettings(), courtsMode: 'sometimes' }), /unknown courts mode/)
 })
 
-test('settings saved before auto courts keep their fixed number', () => {
+test('MIGRACIÓN (se quita el 2026-10-15): settings saved before auto courts keep their fixed number', () => {
   const old = { ...defaultSettings(), courts: 3 }
   delete old.courtsMode
   migrateSettings(old)
