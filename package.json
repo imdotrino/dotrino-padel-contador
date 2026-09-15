@@ -14,8 +14,11 @@
   "dependencies": {
     "@dotrino/identity": "0.90.0",
     "@dotrino/install": "0.3.1",
+    "@dotrino/lobby": "0.10.0",
     "@dotrino/nav": "0.3.0",
+    "@dotrino/proxy-client": "0.22.0",
     "@dotrino/reputation": "0.12.0",
+    "@dotrino/share": "0.3.0",
     "@dotrino/store": "0.8.0",
     "@dotrino/topbar": "0.10.0"
   },

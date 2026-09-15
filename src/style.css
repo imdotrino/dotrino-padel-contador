@@ -539,6 +539,27 @@ body.tiebreak .tie-badge { display: block; }
   overflow-wrap: anywhere;
 }
 .notice.error { border-color: var(--danger); }
+
+/* Compartir en vivo (el organizador) y el aviso de quien mira. */
+.live-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.live-bar .live-state { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; color: var(--muted); }
+.live-bar.on { border-color: var(--accent); }
+.live-bar.on .live-state { color: var(--accent); }
+.notice.watch-bar { flex-direction: row; align-items: center; justify-content: space-between; }
+.notice.watch-bar p { flex: 1; min-width: 0; }
+.notice.watch-bar.live { border-color: var(--accent); }
+.notice.watch-bar.denied, .notice.watch-bar.bad-link, .notice.watch-bar.error { border-color: var(--danger); }
+.tab[disabled] { opacity: .45; cursor: default; }
 .empty-state {
   display: flex;
   flex-direction: column;

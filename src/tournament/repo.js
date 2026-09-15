@@ -23,6 +23,10 @@ export const state = {
 let onError = e => { throw e }
 export function onSaveError (fn) { onError = fn }
 
+// Quien necesite enterarse de cada cambio de un torneo (compartir en vivo).
+const savedListeners = new Set()
+export function onSaved (fn) { savedListeners.add(fn); return () => savedListeners.delete(fn) }
+
 export async function load () {
   state.status = 'loading'
   state.error = null
@@ -53,6 +57,7 @@ export function save (tournament) {
   pending.set(tournament.id, tournament)
   clearTimeout(timer)
   timer = setTimeout(flush, SAVE_DELAY)
+  for (const fn of savedListeners) fn(tournament)
 }
 
 export async function flush () {

@@ -10,8 +10,12 @@ import { ask, toast } from '../ui/dialog.js'
 import { prepareAlarm, ring, keepAwake } from '../ui/alarm.js'
 import * as engine from './engine.js'
 import * as repo from './repo.js'
+import * as live from './live.js'
 
-let ui = null // { goTab, playMatch, linkedMatchId }
+let ui = null // { goTab, playMatch, linkedMatchId, openShare, leaveWatch }
+// Mirando un torneo ajeno (`#watch=…`): { state, status, reason }. Partidos y Tabla pintan
+// el torneo que llegó, en solo lectura. null en la app normal.
+let watching = null
 let draft = null // torneo que se está creando: no existe en el store hasta «Empezar»
 let openRule = null // la regla que se está editando, una a la vez
 let ruleForm = null // { source, baseId, name, settings }: el formulario de abajo (editar el set elegido o crear uno a partir de él)
@@ -194,16 +198,79 @@ function paintNext (tour) {
 
 function renderMatches () {
   const page = $('matchesPage')
+  if (watching) return renderWatched(page, paintMatches)
   if (storeGate(page)) return
   const tour = repo.active()
   if (!tour) { page.innerHTML = emptyState(); return }
+  paintMatches(page, tour)
+}
+
+function paintMatches (page, tour) {
   // Las rondas en orden y «Armar ronda» debajo: cada ronda nueva se suma al final.
   page.innerHTML = `
+    ${watching ? watchBanner() : liveBar(tour)}
     <header class="t-head"><h2 class="t-name">${esc(tour.name)}</h2><p class="t-sub" id="matchesProgress"></p></header>
     <div class="rounds">${tour.rounds.map((r, i) => roundHtml(tour, r, i)).join('')}</div>
     <div id="nextBlock"></div>`
   paintProgress(tour)
   paintNext(tour)
+}
+
+// ---------- en vivo ----------
+
+// El organizador: compartir el torneo para que otros lo miren. Los dos botones están
+// siempre; «Dejar de compartir», deshabilitado mientras no se comparte.
+function liveBar (tour) {
+  const on = live.isSharing(tour)
+  const n = live.viewersOf(tour)
+  return `<div class="live-bar${on ? ' on' : ''}" data-testid="live-bar">
+    <span class="live-state" data-testid="live-state">${esc(on ? t(n === 1 ? 'liveOn_one' : 'liveOn', { n }) : t('liveOff'))}</span>
+    <button type="button" class="btn-small" data-action="live-share" data-testid="live-share">${esc(t('liveShare'))}</button>
+    <button type="button" class="btn-small" data-action="live-stop" data-testid="live-stop"${on ? '' : ' disabled'}>${esc(t('liveStop'))}</button>
+  </div>`
+}
+
+async function shareLive (tour) {
+  let url
+  try {
+    url = await live.share(tour)
+  } catch (e) {
+    console.error('[padel] could not share the tournament:', e)
+    toast(t('liveFailed', { reason: e.message }), 'error')
+    return
+  }
+  // La clave del enlace se guarda con el torneo: así sobrevive a recargar.
+  repo.save(tour)
+  renderMatches()
+  ui.openShare(url, tour.name)
+}
+
+async function stopLive (tour) {
+  const yes = await ask({ title: t('liveStopTitle'), text: t('liveStopText'), ok: t('liveStop'), danger: true })
+  if (!yes) return
+  await live.stop(tour)
+  repo.save(tour)
+  renderMatches()
+}
+
+const WATCH_TEXT = { connecting: 'watchConnecting', live: 'watchLive', denied: 'watchDenied', 'bad-link': 'watchBadLink', error: 'watchFailed', closed: 'watchClosed' }
+
+// Quien mira: en qué está la conexión, y la salida a la app normal.
+function watchBanner () {
+  const { status, reason, state } = watching
+  const key = status === 'host-offline' ? (state ? 'watchWaiting' : 'watchWaitingEmpty') : WATCH_TEXT[status]
+  if (!key) throw new Error(`unknown watch status: ${status}`)
+  return `<div class="notice watch-bar ${status}" data-testid="watch-status" data-status="${status}">
+    <p>${esc(t(key, { reason: reason || '' }))}</p>
+    <button type="button" class="btn-small" data-watch-action="leave" data-testid="watch-leave">${esc(t('watchLeave'))}</button>
+  </div>`
+}
+
+// El torneo que llegó, con todo lo que se toca deshabilitado: es de otro, y solo se mira.
+function renderWatched (page, paint) {
+  if (!watching.state) { page.innerHTML = watchBanner(); return }
+  paint(page, watching.state)
+  for (const el of page.querySelectorAll('button:not([data-watch-action]), input')) el.disabled = true
 }
 
 const correctionNoted = new Set() // torneos en los que ya se avisó, en esta sesión
@@ -242,9 +309,12 @@ function onScoreInput (input) {
 }
 
 async function onMatchesClick (e) {
+  if (e.target.closest('[data-watch-action]')) return ui.leaveWatch()
   const b = e.target.closest('[data-action]')
   if (!b || await commonAction(b.dataset.action)) return
   const tour = repo.active()
+  if (b.dataset.action === 'live-share') return shareLive(tour)
+  if (b.dataset.action === 'live-stop') return stopLive(tour)
   switch (b.dataset.action) {
     case 'next': {
       const r = engine.generateRound(tour)
@@ -314,15 +384,20 @@ const signed = n => (n > 0 ? '+' + n : n < 0 ? '−' + Math.abs(n) : '0')
 
 function renderTable () {
   const page = $('tablePage')
+  if (watching) return renderWatched(page, paintTable)
   if (storeGate(page)) return
   const tour = repo.active()
   if (!tour) { page.innerHTML = emptyState(); return }
+  paintTable(page, tour)
+}
+
+function paintTable (page, tour) {
   const rows = engine.standings(tour)
   const finished = engine.status(tour).finished
   const sets = tour.settings.scoring.sets.on
   const rank = i => (finished && i < 3 ? ['🥇', '🥈', '🥉'][i] : String(i + 1))
   const head = (label, title) => `<th scope="col"><abbr title="${esc(t(title))}">${esc(t(label))}</abbr></th>`
-  page.innerHTML = `
+  page.innerHTML = `${watching ? watchBanner() : ''}
     <header class="t-head"><h2 class="t-name">${esc(tour.name)}</h2>
       <p class="t-sub" data-testid="scoring-summary">${esc(t('scoring'))}: ${esc(scoringSummary(tour.settings))}</p></header>
     <div class="table-wrap"><table class="standings" data-testid="standings">
@@ -347,6 +422,7 @@ const scoringSummary = s => engine.SCORE_KINDS
   .join(' · ')
 
 async function onTableClick (e) {
+  if (e.target.closest('[data-watch-action]')) return ui.leaveWatch()
   const b = e.target.closest('[data-action]')
   if (b && !(await commonAction(b.dataset.action))) throw new Error(`unknown action: ${b.dataset.action}`)
 }
@@ -642,6 +718,7 @@ function historyHtml () {
 
 function renderSetup () {
   const page = $('setupPage')
+  if (watching) { page.innerHTML = watchBanner(); return }
   if (storeGate(page)) return
   const tour = current()
   // El formulario de reglas va debajo de todo.
@@ -793,6 +870,8 @@ async function deleteTournament (tour) {
     danger: true
   })
   if (!yes) return
+  // Un torneo borrado no se sigue emitiendo.
+  if (live.isSharing(tour)) await live.stop(tour)
   await repo.remove(tour.id)
   renderAll()
 }
@@ -877,6 +956,7 @@ async function onSetupClick (e) {
       draft = null
       ruleForm = null
       await repo.setActive(b.closest('[data-tournament]').dataset.tournament)
+      resumeLive()
       renderAll()
       return ui.goTab('matches')
     case 'remove-player':
@@ -926,6 +1006,30 @@ function onSetupChange (e) {
 
 // ---------- API ----------
 
+/** Entrar en modo «mirar» (lo llama el arranque con un enlace `#watch=`). */
+export function setWatching (w) { watching = w }
+
+/**
+ * El organizador: si el torneo abierto se estaba compartiendo, se vuelve a emitir con el
+ * mismo enlace (tras recargar, o al abrirlo desde «Mis torneos»).
+ */
+export function resumeLive () {
+  const tour = repo.active()
+  if (watching || !live.isSharing(tour)) return
+  live.share(tour).then(() => refreshLive()).catch(e => {
+    console.error('[padel] could not resume sharing:', e)
+    toast(t('liveFailed', { reason: e.message }), 'error')
+  })
+}
+
+/** Cuántos miran cambió: se repinta solo la barra, sin tocar lo que se está escribiendo. */
+export function refreshLive () {
+  if (watching || repo.state.status !== 'ready') return
+  const tour = repo.active()
+  const el = $('matchesPage').querySelector('[data-testid="live-bar"]')
+  if (tour && el) el.outerHTML = liveBar(tour)
+}
+
 export function renderAll () {
   renderMatches()
   renderTable()
@@ -965,8 +1069,9 @@ export function clockForLink (link, now) {
 const seenClock = new Map() // round.id → último estado visto
 
 export function tick (now) {
-  if (repo.state.status !== 'ready') return
-  const tour = repo.active()
+  // Quien mira ve correr el cronómetro del torneo que llegó, pero no le suena ni le deja
+  // la pantalla encendida: eso es del organizador.
+  const tour = watching ? watching.state : (repo.state.status === 'ready' ? repo.active() : null)
   let running = false
   tour?.rounds.forEach((r, i) => {
     if (!r.clock) return
@@ -974,7 +1079,7 @@ export function tick (now) {
     const before = seenClock.get(r.id)
     seenClock.set(r.id, c.state)
     if (c.state === 'running') running = true
-    if (before === 'running' && c.state === 'done') {
+    if (before === 'running' && c.state === 'done' && !watching) {
       ring()
       toast(t('timeUp', { n: i + 1 }))
     }
@@ -988,7 +1093,7 @@ export function tick (now) {
     const text = clockText(c)
     if (time.textContent !== text) time.textContent = text
   })
-  keepAwake(running)
+  if (!watching) keepAwake(running)
 }
 
 export function initTournamentViews (options) {
