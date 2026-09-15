@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import {
   createTournament, addPlayer, addTeam, generateRound, standings, status, estimate,
   setScore, nextRoundBlocker, redoLastRound, setPartners, removePlayer, removeTeam,
-  appearances, hasResults
+  appearances, hasResults, defaultSettings, SCORE_KINDS, setSets, outcome, toggleScoring,
+  clockOf, startClock, pauseClock, resumeClock, resetClock, formatClock, migrateTournament
 } from '../src/tournament/engine.js'
 
 // Azar con semilla, para que un fallo se pueda repetir.
@@ -152,23 +153,125 @@ test('ranked rotating: court 1 gets the top four, 1st+4th against 2nd+3rd', () =
   assert.ok(!(first.has(table[0]) && first.has(table[1])))
 })
 
-test('standings by games and by match', () => {
+test('standings: games and match points, alone or added up', () => {
   const t = withPlayers(4, { courts: 1, limitType: 'rounds', limitValue: 2 })
   const [p0, p1, p2, p3] = t.players.map(p => p.id)
-  t.rounds.push({ id: 'r1', rest: [], matches: [{ id: 'm1', court: 1, a: [p0, p1], b: [p2, p3], teams: null, score: { a: 6, b: 4 } }] })
-  t.rounds.push({ id: 'r2', rest: [], matches: [{ id: 'm2', court: 1, a: [p0, p2], b: [p1, p3], teams: null, score: { a: 2, b: 6 } }] })
+  t.rounds.push({ id: 'r1', rest: [], clock: null, matches: [{ id: 'm1', court: 1, a: [p0, p1], b: [p2, p3], teams: null, score: { a: 6, b: 4 }, sets: null }] })
+  t.rounds.push({ id: 'r2', rest: [], clock: null, matches: [{ id: 'm2', court: 1, a: [p0, p2], b: [p1, p3], teams: null, score: { a: 2, b: 6 }, sets: null }] })
+  const only = kind => { for (const k of SCORE_KINDS) t.settings.scoring[k].on = k === kind }
 
+  only('games')
   const games = standings(t)
   // p1: 6+6=12, p3: 4+6=10, p0: 6+2=8, p2: 4+2=6
   assert.deepEqual(games.map(r => r.id), [p1, p3, p0, p2])
   assert.equal(games[0].points, 12)
 
-  t.settings.scoring = 'match'
+  only('match')
   const match = standings(t)
   // p1 ganó 2 (6 pts); p0 y p3 ganaron 1 (3 pts): desempata la diferencia de juegos
   // (p3: 10-8=+2, p0: 8-10=-2).
   assert.deepEqual(match.map(r => r.id), [p1, p3, p0, p2])
   assert.equal(match[0].points, 6)
+
+  // Por defecto se suman juego (1) y partido (3): p1 = 12 + 6.
+  t.settings.scoring = defaultSettings().scoring
+  assert.equal(standings(t)[0].points, 18)
+})
+
+test('sets decide the winner and add their own points; a draw gives no match points', () => {
+  const t = withPlayers(4, { courts: 1, limitType: 'rounds', limitValue: 1 })
+  const r = generateRound(t, seeded(1))
+  t.rounds.push(r)
+  const m = r.matches[0]
+  const row = id => standings(t).find(x => x.id === id)
+  // Más juegos para b, pero a ganó 2 sets a 1: gana a.
+  setScore(t, m.id, 13, 15)
+  setSets(t, m.id, 2, 1)
+  assert.equal(outcome(m), 'a')
+  toggleScoring(t, 'sets', true)
+  // a: 13 juegos × 1 + 2 sets × 2 + partido 3 = 20 · b: 15 + 1 × 2 = 17
+  assert.equal(row(m.a[0]).points, 20)
+  assert.equal(row(m.b[0]).points, 17)
+  // Sets empatados: deciden los juegos.
+  setSets(t, m.id, 1, 1)
+  assert.equal(outcome(m), 'b')
+  // Sin sets y con los juegos empatados: empate, y nadie suma el partido.
+  setSets(t, m.id, null, null)
+  setScore(t, m.id, 4, 4)
+  assert.equal(outcome(m), 'draw')
+  assert.ok(standings(t).every(x => x.won === 0 && x.drawn === 1 && x.points === 4))
+})
+
+test('the last scoring kind turned on cannot be turned off', () => {
+  const t = withPlayers(4, {})
+  toggleScoring(t, 'games', false)
+  assert.throws(() => toggleScoring(t, 'match', false), /at least one/)
+  toggleScoring(t, 'sets', true)
+  toggleScoring(t, 'match', false)
+  assert.deepEqual(SCORE_KINDS.filter(k => t.settings.scoring[k].on), ['sets'])
+})
+
+test('matches end on time by default; the round clock runs, pauses and ends on instants', () => {
+  const t = withPlayers(4, { courts: 1 })
+  assert.equal(t.settings.matchEnd, 'time')
+  const r = generateRound(t, seeded(1))
+  t.rounds.push(r)
+  const T = 1_000_000
+  const MIN = 60000
+  assert.deepEqual(clockOf(t, r, T), { state: 'idle', remainingMs: 20 * MIN, minutes: 20 })
+  t.settings.matchMinutes = 10 // antes de empezar: cuenta
+  startClock(t, r.id, T)
+  t.settings.matchMinutes = 30 // ya empezado: no cuenta
+  assert.deepEqual(clockOf(t, r, T + MIN), { state: 'running', remainingMs: 9 * MIN, minutes: 10 })
+  pauseClock(t, r.id, T + MIN)
+  assert.deepEqual(clockOf(t, r, T + 10 * MIN), { state: 'paused', remainingMs: 9 * MIN, minutes: 10 })
+  resumeClock(t, r.id, T + 10 * MIN)
+  assert.equal(clockOf(t, r, T + 19 * MIN - 1).state, 'running')
+  assert.deepEqual(clockOf(t, r, T + 19 * MIN), { state: 'done', remainingMs: 0, minutes: 10 })
+  assert.deepEqual(clockOf(t, r, T + 99 * MIN), { state: 'done', remainingMs: 0, minutes: 10 })
+  assert.throws(() => startClock(t, r.id, T), /already started/)
+  assert.throws(() => pauseClock(t, r.id, T + 99 * MIN), /not running/)
+  resetClock(t, r.id)
+  assert.equal(clockOf(t, r, T).state, 'idle')
+  t.settings.matchEnd = 'games'
+  assert.throws(() => startClock(t, r.id, T), /does not play on time/)
+  assert.equal(formatClock(9 * MIN + 1), '9:01')
+  assert.equal(formatClock(MIN - 1), '1:00')
+  assert.equal(formatClock(0), '0:00')
+})
+
+test('MIGRACIÓN (se quita el 2026-10-15): a tournament saved before keeps playing as it did', () => {
+  const old = withPlayers(4, { courts: 1 })
+  old.rounds.push(generateRound(old, seeded(1)))
+  // Lo que traía un torneo guardado antes del cronómetro y de los puntos combinables.
+  old.settings.scoring = 'match'
+  delete old.settings.matchEnd
+  delete old.settings.matchMinutes
+  delete old.rounds[0].clock
+  delete old.rounds[0].matches[0].sets
+  migrateTournament(old)
+  assert.equal(old.settings.matchEnd, 'games')
+  assert.deepEqual(SCORE_KINDS.filter(k => old.settings.scoring[k].on), ['match'])
+  assert.equal(old.settings.scoring.match.points, 3)
+  assert.equal(old.rounds[0].clock, null)
+  assert.equal(old.rounds[0].matches[0].sets, null)
+  old.settings.scoring = 'weird'
+  assert.throws(() => migrateTournament(old), /at least one/)
+})
+
+test('correcting a result of an earlier round never changes the rounds already created (by score)', () => {
+  const t = withPlayers(8, { courts: 2, pairing: 'ranked', limitType: 'rounds', limitValue: 5 })
+  const r1 = generateRound(t, seeded(3))
+  t.rounds.push(r1)
+  setScore(t, r1.matches[0].id, 6, 1)
+  setScore(t, r1.matches[1].id, 6, 2)
+  t.rounds.push(generateRound(t, seeded(3)))
+  const snapshot = JSON.stringify(t.rounds[1])
+  const table = standings(t).map(x => x.id)
+  // Corrección: el resultado de la cancha 1 era al revés.
+  setScore(t, r1.matches[0].id, 1, 6)
+  assert.equal(JSON.stringify(t.rounds[1]), snapshot, 'round 2 stays as it was drawn')
+  assert.notDeepEqual(standings(t).map(x => x.id), table, 'the table does change')
 })
 
 test('a partial score does not count', () => {

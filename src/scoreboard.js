@@ -5,6 +5,7 @@ import { $, cap, escapeHtml } from './dom.js'
 import { t } from './i18n.js'
 import { ask, toast } from './ui/dialog.js'
 import { listDocs, putDoc, removeDoc } from './storage.js'
+import { formatClock } from './tournament/engine.js'
 
 // El partido en curso es progreso volátil de este aparato (§4): localStorage.
 const LIVE_KEY = 'padel.live'
@@ -34,12 +35,16 @@ const state = {
   link: null // { tournamentId, tournamentName, matchId, round, court, target, left, right }
 }
 
-let hooks = null
+let hooks = null // { saveLinked, linkedSaved, linkedClock }
+let lastClock = null // último estado visto del cronómetro del partido del torneo
 
 const other = side => (side === 'left' ? 'right' : 'left')
 const flipServer = () => { state.server = other(state.server) }
-// A 1 set, o jugando un partido del torneo, los juegos se acumulan sin cerrar sets.
-const endless = () => config.sets === 1 || state.link !== null
+// Los juegos se acumulan sin cerrar sets a 1 set, o en un partido del torneo que no
+// cuenta sets. Si el torneo puntúa por sets, su partido cierra sets de verdad.
+const endless = () => (state.link ? !state.link.sets : config.sets === 1)
+// Juegos de un lado en todo el partido: los de los sets cerrados más los del set en curso.
+const totalGames = side => state.setsHistory.reduce((n, s) => n + s[side], 0) + state[side].g
 
 // ---------- persistencia local ----------
 
@@ -229,7 +234,7 @@ export function render () {
     // antes, se queda para poder corregirlo.
     const showSets = !endless() || state[side].s > 0 || state[other(side)].s > 0
     $('meta' + S).innerHTML =
-      (showSets ? row('s', 'row-sets', state[side].s, 'sets', endless() ? 0 : config.sets) : '') +
+      (showSets ? row('s', 'row-sets', state[side].s, 'sets', state.link || endless() ? 0 : config.sets) : '') +
       row('g', 'row-games', state[side].g, 'games', 0)
     const pointBtn = delta =>
       `<button class="adj adj-points" data-side="${side}" data-kind="p" data-delta="${delta}"` +
@@ -256,12 +261,19 @@ function renderLink () {
   $('linkedBar').hidden = !l
   $('btnNew').textContent = l ? t('saveResult') : t('newMatch')
   for (const b of document.querySelectorAll('.edit-name')) b.hidden = !!l
-  if (l) {
-    $('linkedLabel').textContent = t('linkedLabel', { name: l.tournamentName, round: l.round, court: l.court }) +
-      ' · ' + (l.target ? t('toGames', { n: l.target }) : t('freeGames'))
-  }
+  if (l) $('linkedLabel').textContent = linkLabel(Date.now())
   $('nameLeft').placeholder = t('teamA')
   $('nameRight').placeholder = t('teamB')
+}
+
+// El rótulo del partido del torneo. Por tiempo lleva la cuenta atrás de su ronda.
+function linkLabel (now) {
+  const l = state.link
+  const head = t('linkedLabel', { name: l.tournamentName, round: l.round, court: l.court })
+  if (!l.timed) return head + ' · ' + (l.target ? t('toGames', { n: l.target }) : t('freeGames'))
+  const c = hooks.linkedClock(l, now)
+  if (!c) return head + ' · ' + t('onTime')
+  return head + ' · ⏱ ' + (c.state === 'done' ? t('clockDone') : formatClock(c.remainingMs))
 }
 
 // Mini cancha landscape (vista superior): red vertical en el centro, mitad izquierda =
@@ -391,6 +403,10 @@ export async function playLinked (link) {
     if (!yes) return false
   }
   state.link = link
+  // El estado del reloj AL ENLAZAR: si ya corría y se acaba antes del primer tic, el
+  // partido igual se guarda solo.
+  const c = link.timed ? hooks.linkedClock(link, Date.now()) : null
+  lastClock = c ? c.state : null
   $('nameLeft').value = link.left
   $('nameRight').value = link.right
   resetMatch()
@@ -399,23 +415,58 @@ export async function playLinked (link) {
 
 function checkLinkedTarget () {
   const l = state.link
-  if (l && l.target && (state.left.g >= l.target || state.right.g >= l.target)) saveLinked()
+  if (l && l.target && (totalGames('left') >= l.target || totalGames('right') >= l.target)) saveLinked()
+}
+
+const resultText = () => {
+  const l = state.link
+  const sets = l.sets ? `  (SETS ${state.left.s}–${state.right.s})` : ''
+  return `${l.left}  ${totalGames('left')} – ${totalGames('right')}  ${l.right}${sets}`
 }
 
 async function saveLinked () {
   const l = state.link
-  const yes = await ask({
-    title: t('saveResultTitle'),
-    text: `${l.left}  ${state.left.g} – ${state.right.g}  ${l.right}`,
-    ok: t('save'),
-    cancel: t('keepPlaying')
+  const yes = await ask({ title: t('saveResultTitle'), text: resultText(), ok: t('save'), cancel: t('keepPlaying') })
+  // Mientras se decidía pudo acabarse el tiempo y guardarse solo: ya no hay nada que guardar.
+  if (!yes || state.link !== l) return
+  commitLinked()
+}
+
+// Guarda en el torneo lo que marca ahora y suelta el partido. false si no se pudo (el
+// torneo ya dijo por qué).
+function commitLinked () {
+  const l = state.link
+  const saved = hooks.saveLinked({
+    link: l,
+    games: [totalGames('left'), totalGames('right')],
+    sets: l.sets ? [state.left.s, state.right.s] : null
   })
-  if (!yes) return
-  if (!hooks.saveLinked({ link: l, left: state.left.g, right: state.right.g })) return
+  if (!saved) return false
   // Primero se suelta el partido y después se avisa: si se avisara antes, la lista de
   // partidos se pintaría con este todavía «en el marcador».
   unlink()
   hooks.linkedSaved()
+  return true
+}
+
+// Por tiempo, el partido termina con el marcador que haya: se guarda sin preguntar.
+function timeUp () {
+  const text = resultText()
+  if (commitLinked()) toast(t('timeUpSaved', { result: text }))
+}
+
+export function tick (now) {
+  const l = state.link
+  if (!l || !l.timed) {
+    lastClock = null
+    return
+  }
+  const c = hooks.linkedClock(l, now)
+  const before = lastClock
+  lastClock = c ? c.state : null
+  const label = linkLabel(now)
+  if ($('linkedLabel').textContent !== label) $('linkedLabel').textContent = label
+  if (before === 'running' && lastClock === 'done') timeUp()
 }
 
 function unlink () {

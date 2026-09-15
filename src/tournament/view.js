@@ -4,18 +4,22 @@
 // Torneo es una pantalla ADMINISTRATIVA (§5.1): sin párrafos de presentación; lo que
 // hace falta explicar va detrás de un botón (i).
 import { $, escapeHtml as esc } from '../dom.js'
-import { t, getLang } from '../i18n.js'
+import { t, tn, getLang } from '../i18n.js'
 import { ask, toast } from '../ui/dialog.js'
+import { prepareAlarm, ring, keepAwake } from '../ui/alarm.js'
 import * as engine from './engine.js'
 import * as repo from './repo.js'
 
 let ui = null // { goTab, playMatch, linkedMatchId }
 let draft = null // torneo que se está creando: no existe en el store hasta «Empezar»
-let openInfo = null // la (i) abierta, una a la vez
+let openRule = null // la regla que se está editando, una a la vez
 
-const RANGES = { courts: [1, 20], limitValue: [1, 99], gamesPerMatch: [0, 20] }
-const LABELS = { partners: 'partners', pairing: 'pairing', courts: 'courts', limit: 'limit', scoring: 'scoring', games: 'gamesPerMatch' }
-const INFOS = new Set(['partners', 'pairing', 'limit', 'scoring', 'games'])
+const RANGES = { courts: [1, 20], limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
+const STEPS = { matchMinutes: 5 }
+const LABELS = { name: 'name', partners: 'partners', pairing: 'pairing', courts: 'courts', limit: 'limit', scoring: 'scoring', matchEnd: 'matchEnd' }
+const INFOS = new Set(['partners', 'pairing', 'limit', 'scoring', 'matchEnd'])
+const PARTNER_LABELS = { rotating: 'partnersRotating', fixed: 'partnersFixed' }
+const PAIRING_LABELS = { random: 'pairingRandom', ranked: 'pairingRanked' }
 
 // ---------- nombres ----------
 
@@ -83,25 +87,50 @@ function withFocus (page, paint) {
 
 // ---------- Partidos ----------
 
-const winner = m => (!engine.hasScore(m) || m.score.a === m.score.b ? null : (m.score.a > m.score.b ? 'a' : 'b'))
-
 function matchHtml (tour, m) {
   const value = v => (Number.isInteger(v) ? String(v) : '')
   const linked = ui.linkedMatchId() === m.id
-  const w = winner(m)
+  const w = engine.outcome(m)
+  // Con sets, cada lado anota sets y juegos; sin sets, solo juegos (y la fila entera es
+  // la etiqueta de su casilla).
+  const withSets = tour.settings.scoring.sets.on
+  const tag = withSets ? 'div' : 'label'
+  const input = (s, kind, v, label) => `<input class="score" type="number" inputmode="numeric" min="0" max="99"
+    data-kind="${kind}" data-testid="${kind === 'sets' ? 'sets' : 'score'}-${s}" value="${value(v)}" aria-label="${esc(label)}">`
   return `<div class="match${linked ? ' linked' : ''}" data-match="${m.id}" data-testid="match">
     <div class="match-head">
       <span class="court">${esc(t('court', { n: m.court }))}</span>
       ${linked ? `<span class="in-board">● ${esc(t('inScoreboard'))}</span>` : ''}
       <button type="button" class="btn-play" data-action="play" data-testid="play-match">${esc(t('play'))}</button>
     </div>
-    ${['a', 'b'].map(s => `<label class="side${w === s ? ' won' : ''}" data-side="${s}">
+    ${withSets ? `<div class="score-cols" aria-hidden="true"><span>${esc(t('setsShort'))}</span><span>${esc(t('gamesShort'))}</span></div>` : ''}
+    ${['a', 'b'].map(s => `<${tag} class="side${w === s ? ' won' : ''}" data-side="${s}">
       <span class="side-name">${esc(sideName(tour, m[s]))}</span>
-      <input class="score" type="number" inputmode="numeric" min="0" max="99" data-testid="score-${s}"
-        value="${value(m.score?.[s])}" aria-label="${esc(t('gamesOf', { name: sideName(tour, m[s]) }))}">
-    </label>`).join('')}
+      ${withSets ? input(s, 'sets', m.sets?.[s], t('setsOf', { name: sideName(tour, m[s]) })) : ''}
+      ${input(s, 'games', m.score?.[s], t('gamesOf', { name: sideName(tour, m[s]) }))}
+    </${tag}>`).join('')}
   </div>`
 }
+
+// El cronómetro de la ronda en juego. Los botones dependen del estado; el tic cambia
+// solo el tiempo mientras el estado no cambie (ver `tick`).
+function clockHtml (tour, r) {
+  const c = engine.clockOf(tour, r, Date.now())
+  const btn = (action, label, primary = false) =>
+    `<button type="button" class="${primary ? 'btn-primary' : 'btn'}" data-action="${action}" data-testid="${action}">${esc(t(label))}</button>`
+  const actions = {
+    idle: btn('clock-start', 'clockStart', true),
+    running: btn('clock-pause', 'clockPause') + btn('clock-reset', 'clockReset'),
+    paused: btn('clock-resume', 'clockResume', true) + btn('clock-reset', 'clockReset'),
+    done: btn('clock-reset', 'clockReset')
+  }[c.state]
+  return `<div class="clock ${c.state}" data-clock="${r.id}" data-state="${c.state}" role="timer" aria-label="${esc(t('clockAria'))}" data-testid="round-clock">
+    <span class="clock-time" data-testid="clock-time">${esc(clockText(c))}</span>
+    <span class="clock-actions">${actions}</span>
+  </div>`
+}
+
+const clockText = c => (c.state === 'done' ? t('clockDone') : engine.formatClock(c.remainingMs))
 
 const roundActions = tour => engine.canRedoLastRound(tour)
   ? `<button type="button" class="btn-small" data-action="redo" data-testid="redo-round">${esc(t('redo'))}</button>
@@ -118,6 +147,7 @@ function roundHtml (tour, r, i) {
       <h3>${esc(t('round', { n: i + 1 }))}</h3>
       <div class="round-actions" data-round-actions>${last ? roundActions(tour) : ''}</div>
     </div>
+    ${last && (tour.settings.matchEnd === 'time' || r.clock) ? clockHtml(tour, r) : ''}
     <div class="round-matches">${r.matches.map(m => matchHtml(tour, m)).join('')}</div>
     ${rest}
   </section>`
@@ -157,14 +187,16 @@ function renderMatches () {
   if (storeGate(page)) return
   const tour = repo.active()
   if (!tour) { page.innerHTML = emptyState(); return }
-  // La ronda más reciente arriba: es la que se está jugando.
+  // Las rondas en orden y «Armar ronda» debajo: cada ronda nueva se suma al final.
   page.innerHTML = `
     <header class="t-head"><h2 class="t-name">${esc(tour.name)}</h2><p class="t-sub" id="matchesProgress"></p></header>
-    <div id="nextBlock"></div>
-    <div class="rounds">${tour.rounds.map((r, i) => roundHtml(tour, r, i)).reverse().join('')}</div>`
+    <div class="rounds">${tour.rounds.map((r, i) => roundHtml(tour, r, i)).join('')}</div>
+    <div id="nextBlock"></div>`
   paintProgress(tour)
   paintNext(tour)
 }
+
+const correctionNoted = new Set() // torneos en los que ya se avisó, en esta sesión
 
 function parseScore (v) {
   if (v === '') return null
@@ -177,15 +209,24 @@ function parseScore (v) {
 function onScoreInput (input) {
   const tour = repo.active()
   const el = input.closest('[data-match]')
-  const [a, b] = [...el.querySelectorAll('input.score')].map(x => parseScore(x.value))
-  engine.setScore(tour, el.dataset.match, a, b)
+  const kind = input.dataset.kind
+  const [a, b] = [...el.querySelectorAll(`input.score[data-kind="${kind}"]`)].map(x => parseScore(x.value))
+  if (kind === 'sets') engine.setSets(tour, el.dataset.match, a, b)
+  else if (kind === 'games') engine.setScore(tour, el.dataset.match, a, b)
+  else throw new Error(`unknown score kind: ${kind}`)
   repo.save(tour)
   const m = engine.findMatch(tour, el.dataset.match)
-  const w = winner(m)
+  const w = engine.outcome(m)
+  // Corregir una ronda que ya tiene otras después: esas no se vuelven a sortear, y se
+  // dice una vez para que nadie espere que cambien.
+  if (tour.rounds.findIndex(r => r.matches.includes(m)) < tour.rounds.length - 1 && !correctionNoted.has(tour.id)) {
+    correctionNoted.add(tour.id)
+    toast(t('correctionNote'))
+  }
   for (const side of el.querySelectorAll('.side')) side.classList.toggle('won', w === side.dataset.side)
   paintProgress(tour)
   paintNext(tour)
-  const latest = $('matchesPage').querySelector('.rounds > .round:first-child [data-round-actions]')
+  const latest = $('matchesPage').querySelector('.rounds > .round:last-child [data-round-actions]')
   if (latest) latest.innerHTML = roundActions(tour)
   renderTable()
 }
@@ -207,16 +248,40 @@ async function onMatchesClick (e) {
     case 'drop':
       engine.removeLastRound(tour)
       break
+    case 'clock-start':
+      prepareAlarm()
+      engine.startClock(tour, b.closest('[data-round]').dataset.round, Date.now())
+      break
+    case 'clock-resume':
+      prepareAlarm()
+      engine.resumeClock(tour, b.closest('[data-round]').dataset.round, Date.now())
+      break
+    case 'clock-pause':
+      engine.pauseClock(tour, b.closest('[data-round]').dataset.round, Date.now())
+      break
+    case 'clock-reset': {
+      const id = b.closest('[data-round]').dataset.round
+      if (engine.clockOf(tour, engine.findRound(tour, id), Date.now()).state === 'running') {
+        const yes = await ask({ title: t('clockResetTitle'), text: t('clockResetText'), ok: t('clockResetOk'), danger: true })
+        if (!yes) return
+      }
+      engine.resetClock(tour, id)
+      break
+    }
     case 'play': {
       const m = engine.findMatch(tour, b.closest('[data-match]').dataset.match)
-      const round = tour.rounds.findIndex(r => r.matches.includes(m)) + 1
+      const index = tour.rounds.findIndex(r => r.matches.includes(m))
+      const s = tour.settings
       await ui.playMatch({
         tournamentId: tour.id,
         tournamentName: tour.name,
         matchId: m.id,
-        round,
+        roundId: tour.rounds[index].id,
+        round: index + 1,
         court: m.court,
-        target: tour.settings.gamesPerMatch,
+        timed: s.matchEnd === 'time',
+        target: s.matchEnd === 'games' ? s.gamesPerMatch : 0,
+        sets: s.scoring.sets.on,
         left: sideName(tour, m.a),
         right: sideName(tour, m.b)
       })
@@ -227,6 +292,10 @@ async function onMatchesClick (e) {
   }
   repo.save(tour)
   renderAll()
+  // La ronda nueva queda al final: se baja hasta ella.
+  if (b.dataset.action === 'next') {
+    $('matchesPage').querySelector('.rounds > .round:last-child').scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
 }
 
 // ---------- Tabla ----------
@@ -240,25 +309,32 @@ function renderTable () {
   if (!tour) { page.innerHTML = emptyState(); return }
   const rows = engine.standings(tour)
   const finished = engine.status(tour).finished
+  const sets = tour.settings.scoring.sets.on
   const rank = i => (finished && i < 3 ? ['🥇', '🥈', '🥉'][i] : String(i + 1))
   const head = (label, title) => `<th scope="col"><abbr title="${esc(t(title))}">${esc(t(label))}</abbr></th>`
   page.innerHTML = `
     <header class="t-head"><h2 class="t-name">${esc(tour.name)}</h2>
-      <p class="t-sub">${esc(t('scoring'))}: ${esc(t(tour.settings.scoring === 'games' ? 'scoringGames' : 'scoringMatch'))}</p></header>
+      <p class="t-sub" data-testid="scoring-summary">${esc(t('scoring'))}: ${esc(scoringSummary(tour.settings))}</p></header>
     <div class="table-wrap"><table class="standings" data-testid="standings">
       <thead><tr>
         <th scope="col">#</th>
         <th scope="col" class="col-name">${esc(t(engine.isFixed(tour) ? 'colTeam' : 'colPlayer'))}</th>
-        ${head('colPlayed', 'colPlayedTitle')}${head('colWon', 'colWonTitle')}${head('colDiff', 'colDiffTitle')}${head('colPoints', 'colPointsTitle')}
+        ${head('colPlayed', 'colPlayedTitle')}${head('colWon', 'colWonTitle')}${sets ? head('colSetDiff', 'colSetDiffTitle') : ''}${head('colDiff', 'colDiffTitle')}${head('colPoints', 'colPointsTitle')}
       </tr></thead>
       <tbody>${rows.map((r, i) => `<tr class="${r.active ? '' : 'retired'}" data-unit="${r.id}">
         <td class="rank">${rank(i)}</td>
         <td class="col-name">${esc(unitName(tour, r.id))}${r.active ? '' : ` <span class="tag">${esc(t('retired'))}</span>`}</td>
-        <td>${r.played}</td><td>${r.won}</td><td>${signed(r.gamesFor - r.gamesAgainst)}</td>
+        <td>${r.played}</td><td>${r.won}</td>${sets ? `<td>${signed(r.setsFor - r.setsAgainst)}</td>` : ''}<td>${signed(r.gamesFor - r.gamesAgainst)}</td>
         <td class="pts">${r.points}</td>
       </tr>`).join('')}</tbody>
     </table></div>`
 }
+
+// «1 por juego · 3 por partido ganado»: lo encendido, con sus puntos.
+const scoringSummary = s => engine.SCORE_KINDS
+  .filter(k => s.scoring[k].on)
+  .map(k => t('pointsPer_' + k, { n: s.scoring[k].points }))
+  .join(' · ')
 
 async function onTableClick (e) {
   const b = e.target.closest('[data-action]')
@@ -267,16 +343,24 @@ async function onTableClick (e) {
 
 // ---------- Torneo (configuración) ----------
 
-function field (key, body) {
-  const info = INFOS.has(key)
-  const open = openInfo === key
-  return `<div class="field">
-    <div class="field-head">
-      <span class="label">${esc(t(LABELS[key]))}</span>
-      ${info ? `<button type="button" class="info-btn" data-info="${key}" aria-expanded="${open}" aria-label="${esc(t('infoAria'))}">i</button>` : ''}
+// Una regla del torneo se LEE como texto, con «Editar» al lado; al pulsarlo aparecen sus
+// opciones y su explicación. `editor` es una función: solo se pinta la que está abierta.
+function rule (key, text, editor, { editable = true, note = '' } = {}) {
+  const open = editable && openRule === key
+  const label = t(LABELS[key])
+  return `<div class="rule${open ? ' open' : ''}" data-rule="${key}" data-testid="rule-${key}">
+    <div class="rule-line">
+      <div class="rule-main">
+        <span class="label">${esc(label)}</span>
+        <p class="rule-text" data-testid="rule-${key}-text">${esc(text)}</p>
+        ${note ? `<p class="hint">${esc(note)}</p>` : ''}
+      </div>
+      ${editable
+        ? `<button type="button" class="btn-small rule-edit" data-edit="${key}" aria-expanded="${open}"
+            aria-label="${esc(t(open ? 'ruleDoneAria' : 'ruleEditAria', { rule: label }))}" data-testid="edit-${key}">${esc(t(open ? 'ruleDone' : 'ruleEdit'))}</button>`
+        : ''}
     </div>
-    ${info && open ? `<p class="info-text">${esc(t('info_' + key))}</p>` : ''}
-    ${body}
+    ${open ? `<div class="rule-editor">${INFOS.has(key) ? `<p class="info-text">${esc(t('info_' + key))}</p>` : ''}${editor()}</div>` : ''}
   </div>`
 }
 
@@ -284,13 +368,46 @@ const seg = (name, options, value, disabled = false) => `<div class="seg" role="
   `<button type="button" class="seg-btn${v === value ? ' on' : ''}" data-seg="${name}" data-value="${v}"
     aria-pressed="${v === value}"${disabled ? ' disabled' : ''} data-testid="${name}-${v}">${esc(t(label))}</button>`).join('')}</div>`
 
-function stepper (name, value, shown) {
-  const [min, max] = RANGES[name]
+function stepper (name, value, shown, [min, max] = RANGES[name], step = STEPS[name] || 1) {
   return `<div class="stepper">
-    <button type="button" class="step" data-step="${name}" data-delta="-1"${value <= min ? ' disabled' : ''} aria-label="−1" data-testid="${name}-minus">−</button>
+    <button type="button" class="step" data-step="${name}" data-delta="${-step}"${value <= min ? ' disabled' : ''} aria-label="−${step}" data-testid="${name}-minus">−</button>
     <output data-testid="${name}-value">${esc(shown)}</output>
-    <button type="button" class="step" data-step="${name}" data-delta="1"${value >= max ? ' disabled' : ''} aria-label="+1" data-testid="${name}-plus">+</button>
+    <button type="button" class="step" data-step="${name}" data-delta="${step}"${value >= max ? ' disabled' : ''} aria-label="+${step}" data-testid="${name}-plus">+</button>
   </div>`
+}
+
+// Lo que suma en la tabla: interruptores que se combinan, cada uno con sus puntos. La
+// última encendida no se puede apagar (queda deshabilitada).
+function scoringBody (s) {
+  const on = engine.SCORE_KINDS.filter(k => s.scoring[k].on)
+  return `<div class="scoring">${engine.SCORE_KINDS.map(k => {
+    const x = s.scoring[k]
+    const last = x.on && on.length === 1
+    return `<div class="scoring-row">
+      <button type="button" class="seg-btn toggle${x.on ? ' on' : ''}" data-toggle-scoring="${k}" aria-pressed="${x.on}"${last ? ' disabled' : ''} data-testid="scoring-${k}">${esc(t('scoring_' + k))}</button>
+      ${x.on ? `<span class="scoring-amount">${stepper('points-' + k, x.points, String(x.points), RANGES.points)}<span class="unit">${esc(t('unit_points'))}</span></span>` : ''}
+    </div>`
+  }).join('')}</div>`
+}
+
+function matchEndBody (s) {
+  const time = s.matchEnd === 'time'
+  const amount = time
+    ? stepper('matchMinutes', s.matchMinutes, String(s.matchMinutes)) + `<span class="unit">${esc(t('unit_minutes'))}</span>`
+    : stepper('gamesPerMatch', s.gamesPerMatch, s.gamesPerMatch ? String(s.gamesPerMatch) : t('free')) + `<span class="unit">${esc(tn('unit_games', s.gamesPerMatch))}</span>`
+  return seg('matchEnd', [['time', 'matchEndTime'], ['games', 'matchEndGames']], s.matchEnd) + `<div class="row">${amount}</div>`
+}
+
+function matchEndSummary (s) {
+  if (s.matchEnd === 'time') return t('matchEndSummaryTime', { n: s.matchMinutes })
+  if (s.matchEnd === 'games') return s.gamesPerMatch ? tn('matchEndSummaryGames', s.gamesPerMatch) : t('matchEndSummaryFree')
+  throw new Error(`unknown match end: ${s.matchEnd}`)
+}
+
+function limitEditor (s, estimateText) {
+  return seg('limitType', [['perPlayer', 'limitPerPlayer'], ['rounds', 'limitRounds'], ['matches', 'limitMatches']], s.limitType) +
+    `<div class="row">${stepper('limitValue', s.limitValue, String(s.limitValue))}<span class="unit">${esc(tn('unit_' + s.limitType, s.limitValue))}</span></div>` +
+    `<p class="hint" data-testid="estimate">${esc(estimateText)}</p>`
 }
 
 const nameInput = (tour, pid) => `<input class="input roster-name" data-rename="${pid}" data-focus-key="rename-${pid}"
@@ -335,25 +452,25 @@ function formHtml (tour) {
   const locked = engine.hasResults(tour)
   const est = engine.estimate(tour)
   const blocker = engine.nextRoundBlocker(tour)
-  const limitBody = seg('limitType', [['perPlayer', 'limitPerPlayer'], ['rounds', 'limitRounds'], ['matches', 'limitMatches']], s.limitType) +
-    `<div class="row">${stepper('limitValue', s.limitValue, String(s.limitValue))}<span class="unit">${esc(t('unit_' + s.limitType))}</span></div>` +
-    `<p class="hint" data-testid="estimate">${est ? esc(t(est.exact ? 'estimateExact' : 'estimate', est)) : ''}</p>`
+  const estimateText = est
+    ? t(est.exact ? 'estimateExact' : 'estimate', est) + (s.matchEnd === 'time' ? ' · ' + t('estimateMinutes', { n: est.rounds * s.matchMinutes }) : '')
+    : ''
+  const limitText = tn('unit_' + s.limitType, s.limitValue, { n: s.limitValue })
   return `
     <header class="t-head"><h2>${esc(t(isDraft ? 'newTournamentH' : 'tournamentH'))}</h2></header>
     <div class="setup-form">
-    <div class="field">
-      <label class="label" for="tourName">${esc(t('name'))}</label>
-      <input id="tourName" class="input" data-field="name" data-focus-key="name" maxlength="40" autocomplete="off"
-        value="${esc(tour.name)}" data-testid="tournament-name">
-    </div>
-    ${field('partners', seg('partners', [['rotating', 'partnersRotating'], ['fixed', 'partnersFixed']], s.partners, locked) +
-      (locked ? `<p class="hint">${esc(t('partnersLocked'))}</p>` : ''))}
-    ${field('pairing', seg('pairing', [['random', 'pairingRandom'], ['ranked', 'pairingRanked']], s.pairing))}
+    ${rule('name', tour.name, () => `<input id="tourName" class="input" data-field="name" data-focus-key="name" maxlength="40"
+        autocomplete="off" value="${esc(tour.name)}" aria-label="${esc(t('name'))}" data-testid="tournament-name">`)}
+    ${rule('partners', t(PARTNER_LABELS[s.partners]),
+      () => seg('partners', [['rotating', 'partnersRotating'], ['fixed', 'partnersFixed']], s.partners),
+      { editable: !locked, note: locked ? t('partnersLocked') : '' })}
+    ${rule('pairing', t(PAIRING_LABELS[s.pairing]),
+      () => seg('pairing', [['random', 'pairingRandom'], ['ranked', 'pairingRanked']], s.pairing))}
     ${rosterHtml(tour)}
-    ${field('courts', stepper('courts', s.courts, String(s.courts)))}
-    ${field('limit', limitBody)}
-    ${field('scoring', seg('scoring', [['games', 'scoringGames'], ['match', 'scoringMatch']], s.scoring))}
-    ${field('games', stepper('gamesPerMatch', s.gamesPerMatch, s.gamesPerMatch ? String(s.gamesPerMatch) : t('free')))}
+    ${rule('courts', tn('courtsCount', s.courts), () => stepper('courts', s.courts, String(s.courts)))}
+    ${rule('limit', `${s.limitValue} ${limitText}${estimateText ? ' · ' + estimateText : ''}`, () => limitEditor(s, estimateText))}
+    ${rule('scoring', scoringSummary(s), () => scoringBody(s))}
+    ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}
     ${isDraft
       ? `<div class="actions">
           <button type="button" class="btn-primary" data-action="start" data-testid="start-tournament"${blocker ? ' disabled' : ''}>${esc(t('start'))}</button>
@@ -403,7 +520,7 @@ function commit (tour) {
 
 function startDraft () {
   draft = engine.createTournament({ name: t('defaultTournamentName', { date: formatDate(Date.now()) }) })
-  openInfo = null
+  openRule = null
   ui.goTab('setup')
 }
 
@@ -448,8 +565,13 @@ async function onSeg (name, value) {
 
 function onStep (name, delta) {
   const tour = current()
-  const [min, max] = RANGES[name]
-  tour.settings[name] = Math.min(max, Math.max(min, tour.settings[name] + delta))
+  const clamp = (v, [min, max]) => Math.min(max, Math.max(min, v))
+  if (name.startsWith('points-')) {
+    const kind = tour.settings.scoring[name.slice('points-'.length)]
+    kind.points = clamp(kind.points + delta, RANGES.points)
+  } else {
+    tour.settings[name] = clamp(tour.settings[name] + delta, RANGES[name])
+  }
   commit(tour)
 }
 
@@ -474,10 +596,19 @@ function onAdd (form) {
 }
 
 async function onSetupClick (e) {
-  const info = e.target.closest('[data-info]')
-  if (info) {
-    openInfo = openInfo === info.dataset.info ? null : info.dataset.info
-    return renderSetup()
+  const edit = e.target.closest('[data-edit]')
+  if (edit) {
+    openRule = openRule === edit.dataset.edit ? null : edit.dataset.edit
+    renderSetup()
+    if (openRule === 'name') $('tourName').focus()
+    return
+  }
+  const toggle = e.target.closest('[data-toggle-scoring]')
+  if (toggle) {
+    const tour = current()
+    const kind = toggle.dataset.toggleScoring
+    engine.toggleScoring(tour, kind, !tour.settings.scoring[kind].on)
+    return commit(tour)
   }
   const segBtn = e.target.closest('[data-seg]')
   if (segBtn) return onSeg(segBtn.dataset.seg, segBtn.dataset.value)
@@ -521,6 +652,8 @@ function onSetupInput (e) {
   const tour = current()
   if (el.dataset.field === 'name') {
     tour.name = el.value
+    // Sin re-pintar (se perdería el foco): se actualiza a mano el texto de la regla.
+    $('setupPage').querySelector('[data-testid="rule-name-text"]').textContent = el.value
   } else if (el.dataset.rename) {
     const name = el.value.trim()
     if (!name) return // vacío mientras se reescribe: se queda el nombre anterior
@@ -545,7 +678,8 @@ export function renderAll () {
   renderSetup()
 }
 
-export function saveLinkedResult ({ link, left, right }) {
+// games: [izquierda, derecha]; sets: igual, o null si el partido no contaba sets.
+export function saveLinkedResult ({ link, games, sets }) {
   if (repo.state.status !== 'ready') {
     toast(t('storeNotReady'), 'error')
     return false
@@ -556,9 +690,51 @@ export function saveLinkedResult ({ link, left, right }) {
     toast(t('linkedGone'), 'error')
     return false
   }
-  engine.setScore(tour, m.id, left, right)
+  engine.setScore(tour, m.id, games[0], games[1])
+  if (sets) engine.setSets(tour, m.id, sets[0], sets[1])
   repo.save(tour)
   return true
+}
+
+// El cronómetro del partido que está en el marcador. null mientras el almacén no está
+// listo o si la ronda ya no existe: el marcador no enseña cuenta atrás.
+export function clockForLink (link, now) {
+  if (repo.state.status !== 'ready') return null
+  const tour = repo.state.list.find(x => x.id === link.tournamentId)
+  const round = tour && tour.rounds.find(r => r.id === link.roundId)
+  return round ? engine.clockOf(tour, round, now) : null
+}
+
+// El tic de los cronómetros. Pinta el tiempo sin re-pintar la página (se perdería el foco
+// de un resultado a medio escribir) y avisa UNA vez cuando uno llega a cero con la app
+// abierta: si ya estaba a cero al abrirla, no suena.
+const seenClock = new Map() // round.id → último estado visto
+
+export function tick (now) {
+  if (repo.state.status !== 'ready') return
+  const tour = repo.active()
+  let running = false
+  tour?.rounds.forEach((r, i) => {
+    if (!r.clock) return
+    const c = engine.clockOf(tour, r, now)
+    const before = seenClock.get(r.id)
+    seenClock.set(r.id, c.state)
+    if (c.state === 'running') running = true
+    if (before === 'running' && c.state === 'done') {
+      ring()
+      toast(t('timeUp', { n: i + 1 }))
+    }
+    const el = $('matchesPage').querySelector(`[data-clock="${CSS.escape(r.id)}"]`)
+    if (!el) return
+    if (el.dataset.state !== c.state) {
+      el.outerHTML = clockHtml(tour, r)
+      return
+    }
+    const time = el.querySelector('.clock-time')
+    const text = clockText(c)
+    if (time.textContent !== text) time.textContent = text
+  })
+  keepAwake(running)
 }
 
 export function initTournamentViews (options) {

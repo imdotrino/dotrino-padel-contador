@@ -547,7 +547,7 @@ body.tiebreak .tie-badge { display: block; }
   font-size: 16px;
 }
 
-#nextBlock { margin-bottom: 16px; }
+#nextBlock { margin-top: 4px; }
 #nextBlock:empty { display: none; }
 .finished {
   display: flex;
@@ -636,25 +636,63 @@ body.tiebreak .tie-badge { display: block; }
   vertical-align: middle;
 }
 
+/* Cronómetro de la ronda */
+.clock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.clock-time { font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.clock.running .clock-time { color: var(--accent); }
+.clock.done { border-color: var(--win); background: rgba(253,224,71,.1); }
+.clock.done .clock-time { color: var(--win); }
+.clock-actions { display: flex; gap: 6px; }
+
+/* Resultado con sets: rótulos sobre las dos casillas de cada lado. */
+.score-cols { display: flex; justify-content: flex-end; gap: 10px; }
+.score-cols span {
+  width: 64px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+
+/* Puntos: interruptores que se combinan, cada uno con su valor. */
+.scoring { display: flex; flex-direction: column; gap: 8px; }
+.scoring-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+/* El botón cede ancho antes de que «pts» se vaya sola a otra línea. */
+.seg-btn.toggle { flex: 0 1 200px; min-width: 0; text-align: left; }
+.scoring-amount { display: inline-flex; align-items: center; gap: 8px; }
+.seg-btn.toggle::before { content: '○ '; }
+.seg-btn.toggle.on::before { content: '✓ '; }
+/* La última encendida no se apaga: se ve encendida, no «deshabilitada». */
+.seg-btn.toggle.on[disabled] { opacity: 1; }
+
 .field { margin-bottom: 20px; }
 .field-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .label { display: block; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 label.label { margin-bottom: 8px; }
-.info-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-  font-style: italic;
-  line-height: 1;
-  cursor: pointer;
-}
-.info-btn[aria-expanded="true"] { background: var(--surface-2); color: var(--text); }
-.info-text { margin: -2px 0 10px; color: #cbd5e1; font-size: 14px; line-height: 1.45; }
+.info-text { margin: 0 0 10px; color: #cbd5e1; font-size: 14px; line-height: 1.45; }
+
+/* Reglas del torneo: se leen como texto y cada una se edita aparte. */
+.rule { padding: 12px 0; border-bottom: 1px solid var(--surface-2); }
+.rule-line { display: flex; align-items: center; gap: 12px; }
+.rule-main { flex: 1; min-width: 0; }
+.rule-text { margin-top: 3px; font-size: 16px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.rule-edit { flex-shrink: 0; }
+.rule.open .rule-edit { border-color: var(--accent); color: var(--accent); }
+.rule-editor { margin-top: 12px; }
+.setup-form > .field-roster { padding-top: 12px; }
 .row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .unit { color: var(--muted); font-size: 14px; }
 .stepper { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }

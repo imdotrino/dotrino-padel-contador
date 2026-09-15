@@ -83,7 +83,8 @@ install.setAttribute('lang', getLang())
 
 scoreboard.initScoreboard({
   saveLinked: tournament.saveLinkedResult,
-  linkedSaved: () => setTab('matches')
+  linkedSaved: () => setTab('matches'),
+  linkedClock: tournament.clockForLink
 })
 tournament.initTournamentViews({
   goTab: setTab,
@@ -97,6 +98,14 @@ repo.load().then(() => { if (currentTab !== 'score') tournament.renderAll() })
 // Lo que quedó sin escribir se escribe antes de que el navegador congele la página.
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') repo.flush() })
 window.addEventListener('pagehide', () => repo.flush())
+
+// Un solo reloj para los cronómetros: el de la ronda en Partidos y la cuenta atrás del
+// partido en el marcador.
+setInterval(() => {
+  const now = Date.now()
+  tournament.tick(now)
+  scoreboard.tick(now)
+}, 500)
 
 topbar.addEventListener('dotrino-lang', e => {
   setLang(e.detail.lang)

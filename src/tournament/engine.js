@@ -5,10 +5,11 @@
 // Modelo:
 //   players: [{ id, name, active }]              todos los jugadores, en cualquier modo
 //   teams:   [{ id, players: [pid, pid], active }] parejas fijas (solo cuentan en 'fixed')
-//   rounds:  [{ id, matches, rest }]
+//   rounds:  [{ id, matches, rest, clock }]
 //     match: { id, court, a: [pid, pid], b: [pid, pid], teams: [tidA, tidB] | null,
-//              score: { a, b } | null }
+//              score: { a, b } | null   (juegos),  sets: { a, b } | null }
 //     rest:  ids de las UNIDADES que descansan (jugadores o parejas, según el modo)
+//     clock: el cronómetro de la ronda cuando se juega por tiempo (ver «cronómetro»)
 //
 // La «unidad» es lo que se programa y se clasifica: el jugador cuando las parejas
 // rotan, la pareja cuando son fijas.
@@ -23,17 +24,33 @@ export const MIN_TEAMS = 3 // parejas fijas: con dos no hay torneo, hay un parti
 const PARTNERS = ['rotating', 'fixed']
 const PAIRINGS = ['random', 'ranked']
 const LIMITS = ['perPlayer', 'rounds', 'matches']
-const SCORINGS = ['games', 'match']
+const MATCH_ENDS = ['time', 'games']
+export const SCORE_KINDS = ['games', 'sets', 'match']
+const MINUTE = 60000
 
-export const DEFAULT_SETTINGS = Object.freeze({
-  partners: 'rotating',
-  pairing: 'random',
-  courts: 2,
-  limitType: 'perPlayer',
-  limitValue: 3,
-  scoring: 'games', // 'games': un punto por juego ganado · 'match': 3 por partido ganado, 1 por empate
-  gamesPerMatch: 6 // 0 = libre: el marcador no propone cerrar el partido
-})
+// Ajustes de un torneo nuevo. Es una función y no un objeto porque `scoring` va anidado:
+// un objeto compartido se modificaría en todos los torneos a la vez.
+export function defaultSettings () {
+  return {
+    partners: 'rotating',
+    pairing: 'random',
+    courts: 2,
+    limitType: 'perPlayer',
+    limitValue: 3,
+    // Qué suma en la tabla, cada cosa con sus puntos; se combinan. Al menos una encendida.
+    // El empate no es «partido ganado»: no da puntos de partido.
+    scoring: {
+      games: { on: true, points: 1 },
+      sets: { on: false, points: 2 },
+      match: { on: true, points: 3 }
+    },
+    // Cómo termina un partido. 'time': el cronómetro de la ronda, y al acabarse vale el
+    // marcador que haya. 'games': cuando un lado llega a `gamesPerMatch` (0 = libre).
+    matchEnd: 'time',
+    matchMinutes: 20,
+    gamesPerMatch: 6
+  }
+}
 
 // Repetir pareja pesa mucho más que repetir rival: lo primero es lo que el modo al
 // azar promete evitar; lo segundo solo se procura.
@@ -49,9 +66,18 @@ function checkSettings (s) {
   if (!PARTNERS.includes(s.partners)) throw new Error(`unknown partners mode: ${s.partners}`)
   if (!PAIRINGS.includes(s.pairing)) throw new Error(`unknown pairing mode: ${s.pairing}`)
   if (!LIMITS.includes(s.limitType)) throw new Error(`unknown limit type: ${s.limitType}`)
-  if (!SCORINGS.includes(s.scoring)) throw new Error(`unknown scoring: ${s.scoring}`)
   if (!Number.isInteger(s.courts) || s.courts < 1) throw new Error(`invalid courts: ${s.courts}`)
   if (!Number.isInteger(s.limitValue) || s.limitValue < 1) throw new Error(`invalid limit: ${s.limitValue}`)
+  for (const k of SCORE_KINDS) {
+    const x = s.scoring?.[k]
+    if (!x || typeof x.on !== 'boolean' || !Number.isInteger(x.points) || x.points < 1) {
+      throw new Error(`invalid scoring.${k}: ${JSON.stringify(x)}`)
+    }
+  }
+  if (!SCORE_KINDS.some(k => s.scoring[k].on)) throw new Error('scoring needs at least one kind turned on')
+  if (!MATCH_ENDS.includes(s.matchEnd)) throw new Error(`unknown match end: ${s.matchEnd}`)
+  if (!Number.isInteger(s.matchMinutes) || s.matchMinutes < 1) throw new Error(`invalid match minutes: ${s.matchMinutes}`)
+  if (!Number.isInteger(s.gamesPerMatch) || s.gamesPerMatch < 0) throw new Error(`invalid games per match: ${s.gamesPerMatch}`)
 }
 
 // ---------- construcción ----------
@@ -63,7 +89,7 @@ export function createTournament ({ name = '', settings = {}, players = [], team
     name,
     createdAt: now,
     updatedAt: now,
-    settings: { ...DEFAULT_SETTINGS, ...settings },
+    settings: { ...defaultSettings(), ...settings },
     players,
     teams,
     rounds: []
@@ -96,6 +122,17 @@ export function activeUnits (t) {
 
 export const hasScore = m =>
   m.score != null && Number.isInteger(m.score.a) && Number.isInteger(m.score.b)
+
+export const hasSets = m =>
+  m.sets != null && Number.isInteger(m.sets.a) && Number.isInteger(m.sets.b)
+
+// Quién ganó: mandan los sets si están y no empatan; si no, los juegos. null sin
+// resultado de juegos (sin juegos no hay partido jugado).
+export function outcome (m) {
+  if (!hasScore(m)) return null
+  const [x, y] = hasSets(m) && m.sets.a !== m.sets.b ? [m.sets.a, m.sets.b] : [m.score.a, m.score.b]
+  return x === y ? 'draw' : (x > y ? 'a' : 'b')
+}
 
 export const hasResults = t => t.rounds.some(r => r.matches.some(hasScore))
 
@@ -205,35 +242,42 @@ export function standings (t) {
   checkSettings(t.settings)
   const fixed = isFixed(t)
   const rows = new Map((fixed ? t.teams : t.players).map(u => [u.id, {
-    id: u.id, active: u.active, played: 0, won: 0, drawn: 0, lost: 0, gamesFor: 0, gamesAgainst: 0, points: 0
+    id: u.id, active: u.active, played: 0, won: 0, drawn: 0, lost: 0,
+    setsFor: 0, setsAgainst: 0, gamesFor: 0, gamesAgainst: 0, points: 0
   }]))
-  const tally = (side, own, other) => {
+  const tally = (side, result, games, sets) => {
     for (const u of side) {
       const row = rows.get(u)
       if (!row) throw new Error(`match references unknown unit ${u}`)
       row.played++
-      row.gamesFor += own
-      row.gamesAgainst += other
-      if (own > other) row.won++
-      else if (own < other) row.lost++
-      else row.drawn++
+      row.gamesFor += games[0]
+      row.gamesAgainst += games[1]
+      row.setsFor += sets[0]
+      row.setsAgainst += sets[1]
+      row[result]++
     }
   }
   for (const r of t.rounds) {
     for (const m of r.matches) {
       if (!hasScore(m)) continue
       const [sa, sb] = unitSides(m, fixed)
-      tally(sa, m.score.a, m.score.b)
-      tally(sb, m.score.b, m.score.a)
+      const o = outcome(m)
+      // Sin sets anotados, cada lado ganó cero sets: es lo que pasó en el marcador.
+      const sets = hasSets(m) ? [m.sets.a, m.sets.b] : [0, 0]
+      tally(sa, o === 'a' ? 'won' : o === 'b' ? 'lost' : 'drawn', [m.score.a, m.score.b], sets)
+      tally(sb, o === 'b' ? 'won' : o === 'a' ? 'lost' : 'drawn', [m.score.b, m.score.a], [sets[1], sets[0]])
     }
   }
-  const byMatch = t.settings.scoring === 'match'
-  for (const row of rows.values()) row.points = byMatch ? row.won * 3 + row.drawn : row.gamesFor
-  const diff = x => x.gamesFor - x.gamesAgainst
-  const tie = byMatch
-    ? (x, y) => diff(y) - diff(x) || y.gamesFor - x.gamesFor
-    : (x, y) => y.won - x.won || diff(y) - diff(x)
-  return [...rows.values()].sort((x, y) => y.points - x.points || tie(x, y))
+  const sc = t.settings.scoring
+  for (const row of rows.values()) {
+    row.points = (sc.games.on ? row.gamesFor * sc.games.points : 0) +
+      (sc.sets.on ? row.setsFor * sc.sets.points : 0) +
+      (sc.match.on ? row.won * sc.match.points : 0)
+  }
+  const setDiff = x => x.setsFor - x.setsAgainst
+  const gameDiff = x => x.gamesFor - x.gamesAgainst
+  return [...rows.values()].sort((x, y) =>
+    y.points - x.points || y.won - x.won || setDiff(y) - setDiff(x) || gameDiff(y) - gameDiff(x) || y.gamesFor - x.gamesFor)
 }
 
 // ---------- generación de rondas ----------
@@ -377,8 +421,9 @@ export function generateRound (t, rng = Math.random) {
   }
   return {
     id: newId(),
-    matches: groups.map((g, i) => ({ id: newId(), court: i + 1, ...g, score: null })),
-    rest
+    matches: groups.map((g, i) => ({ id: newId(), court: i + 1, ...g, score: null, sets: null })),
+    rest,
+    clock: null
   }
 }
 
@@ -390,7 +435,24 @@ export function setScore (t, matchId, a, b) {
   m.score = a == null && b == null ? null : { a, b }
 }
 
-const lastRoundScored = t => t.rounds.length > 0 && t.rounds[t.rounds.length - 1].matches.some(m => m.score != null)
+export function setSets (t, matchId, a, b) {
+  const m = findMatch(t, matchId)
+  if (!m) throw new Error(`unknown match ${matchId}`)
+  m.sets = a == null && b == null ? null : { a, b }
+}
+
+// Encender o apagar lo que suma en la tabla. La última encendida no se apaga: sin nada
+// que sume, la tabla no ordena a nadie.
+export function toggleScoring (t, kind, on) {
+  if (!SCORE_KINDS.includes(kind)) throw new Error(`unknown scoring kind: ${kind}`)
+  if (!on && SCORE_KINDS.every(k => k === kind || !t.settings.scoring[k].on)) {
+    throw new Error('at least one scoring kind must stay on')
+  }
+  t.settings.scoring[kind].on = on
+}
+
+const lastRoundScored = t => t.rounds.length > 0 &&
+  t.rounds[t.rounds.length - 1].matches.some(m => m.score != null || m.sets != null)
 
 export const canRedoLastRound = t => t.rounds.length > 0 && !lastRoundScored(t)
 
@@ -452,4 +514,85 @@ export function restoreUnit (t, id) {
   const u = t.players.find(x => x.id === id) || t.teams.find(x => x.id === id)
   if (!u) throw new Error(`unknown unit ${id}`)
   u.active = true
+}
+
+// ---------- cronómetro de la ronda ----------
+//
+// Por tiempo, la ronda entera juega a la vez con un cronómetro:
+//   round.clock = { minutes, runningSince: ms | null, elapsedMs }
+// Guarda INSTANTES y no un contador que avanza: sobrevive a recargar, a que el móvil
+// congele la pestaña y a abrir el torneo en otro aparato. Los minutos se fijan al
+// EMPEZAR, no al generar la ronda: cambiar la duración antes de arrancar sí cuenta.
+
+export function findRound (t, roundId) {
+  const r = t.rounds.find(x => x.id === roundId)
+  if (!r) throw new Error(`unknown round ${roundId}`)
+  return r
+}
+
+// { state: 'idle' | 'running' | 'paused' | 'done', remainingMs, minutes }
+export function clockOf (t, round, now) {
+  const c = round.clock
+  if (!c) return { state: 'idle', remainingMs: t.settings.matchMinutes * MINUTE, minutes: t.settings.matchMinutes }
+  const elapsed = c.elapsedMs + (c.runningSince == null ? 0 : now - c.runningSince)
+  const remainingMs = Math.max(0, c.minutes * MINUTE - elapsed)
+  const state = remainingMs === 0 ? 'done' : (c.runningSince == null ? 'paused' : 'running')
+  return { state, remainingMs, minutes: c.minutes }
+}
+
+export function startClock (t, roundId, now) {
+  if (t.settings.matchEnd !== 'time') throw new Error('this tournament does not play on time')
+  const r = findRound(t, roundId)
+  if (r.clock) throw new Error(`the clock of round ${roundId} already started`)
+  r.clock = { minutes: t.settings.matchMinutes, runningSince: now, elapsedMs: 0 }
+}
+
+export function pauseClock (t, roundId, now) {
+  const r = findRound(t, roundId)
+  if (clockOf(t, r, now).state !== 'running') throw new Error(`the clock of round ${roundId} is not running`)
+  r.clock.elapsedMs += now - r.clock.runningSince
+  r.clock.runningSince = null
+}
+
+export function resumeClock (t, roundId, now) {
+  const r = findRound(t, roundId)
+  if (clockOf(t, r, now).state !== 'paused') throw new Error(`the clock of round ${roundId} is not paused`)
+  r.clock.runningSince = now
+}
+
+export function resetClock (t, roundId) {
+  findRound(t, roundId).clock = null
+}
+
+// m:ss, redondeando hacia arriba: marca 0:00 solo cuando de verdad se acabó.
+export function formatClock (ms) {
+  const s = Math.ceil(ms / 1000)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+// ---------- migración ----------
+//
+// MIGRACIÓN DECLARADA: añadida el 2026-09-15, se quita el 2026-10-15. Los torneos
+// guardados antes del cronómetro y de los puntos combinables traen `scoring: 'games' |
+// 'match'` y no traen `matchEnd`, `matchMinutes`, `sets` ni `clock`. Se convierten a lo
+// que ya hacían: terminaban por juegos y puntuaban por juego (1) o por partido (3). Lo
+// que no cuadre lo para `checkSettings`. Cubierta por test.
+export function migrateTournament (t) {
+  const s = t.settings
+  if (typeof s.scoring === 'string') {
+    const was = s.scoring
+    s.scoring = {
+      games: { on: was === 'games', points: 1 },
+      sets: { on: false, points: 2 },
+      match: { on: was === 'match', points: 3 }
+    }
+  }
+  if (s.matchEnd === undefined) s.matchEnd = 'games'
+  if (s.matchMinutes === undefined) s.matchMinutes = defaultSettings().matchMinutes
+  for (const r of t.rounds) {
+    if (r.clock === undefined) r.clock = null
+    for (const m of r.matches) if (m.sets === undefined) m.sets = null
+  }
+  checkSettings(s)
+  return t
 }

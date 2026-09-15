@@ -27,6 +27,8 @@ const DICT = {
     replaceMatchTitle: 'Replace the current match?',
     replaceMatchText: 'The scoreboard has a match in progress. It will be discarded.', replace: 'Replace',
     linkedLabel: '{name} · Round {round} · Court {court}', toGames: 'to {n} games', freeGames: 'no game limit',
+    onTime: 'on time', timeUpSaved: 'Time is up. Saved to the tournament: {result}',
+    wakeLockFailed: 'The screen may turn off, and then the time-up alert will not sound. Keep the app in view.',
 
     tabsAria: 'Sections', tabScore: 'Score', tabMatches: 'Matches', tabTable: 'Table', tabSetup: 'Tournament',
 
@@ -46,21 +48,35 @@ const DICT = {
     retired: 'Out', restore: 'Bring back',
     courts: 'Courts', limit: 'Length', limitPerPlayer: 'Per player', limitRounds: 'Rounds', limitMatches: 'Total matches',
     unit_perPlayer: 'matches each', unit_rounds: 'rounds', unit_matches: 'matches',
+    unit_perPlayer_one: 'match each', unit_rounds_one: 'round', unit_matches_one: 'match',
+    courtsCount: '{n} courts', courtsCount_one: '1 court',
     info_limit: 'When there are not enough courts for everyone, players rest in turns so everyone plays the same number of matches.',
     estimate: '≈ {matches} matches · {rounds} rounds', estimateExact: '{matches} matches · {rounds} rounds',
-    scoring: 'Points', scoringGames: 'Per game won', scoringMatch: 'Per match won',
-    info_scoring: 'Per game: you get a point for every game your side wins. Per match: 3 points for a win, 1 for a draw.',
-    gamesPerMatch: 'Games per match', free: 'No limit',
-    info_games: 'When a side reaches this number on the scoreboard, it offers to save the result.',
+    estimateMinutes: '{n} min',
+    scoring: 'Points', scoring_games: 'Per game won', scoring_sets: 'Per set won', scoring_match: 'Per match won',
+    unit_points: 'pts', pointsPer_games: '{n} per game', pointsPer_sets: '{n} per set', pointsPer_match: '{n} per match won',
+    info_scoring: 'Turn on what adds points to the table, each with its own value: they add up. A draw gives no match points. At least one stays on.',
+    matchEnd: 'Match ends', matchEndTime: 'On time', matchEndGames: 'On games', free: 'No limit',
+    unit_minutes: 'minutes', unit_games: 'games', unit_games_one: 'game',
+    matchEndSummaryTime: 'On time · {n} minutes', matchEndSummaryGames: 'On games · to {n} games',
+    matchEndSummaryGames_one: 'On games · to 1 game', matchEndSummaryFree: 'On games · no limit',
+    info_matchEnd: 'On time: each round has a timer and, when it runs out, the matches end with whatever the score is. On games: a match ends when a side reaches that number of games.',
     start: 'Start tournament', needPlayers: 'You need at least {n} players.', needTeams: 'You need at least {n} pairs.',
     deleteTournament: 'Delete tournament', deleteTournamentTitle: 'Delete the tournament?',
     deleteTournamentText: '“{name}”, its rounds and its results will be deleted.',
     myTournaments: 'My tournaments', playersCount: '{n} players', teamsCount: '{n} pairs',
-    stateFinished: 'finished', stateRound: 'round {n}', stateNotStarted: 'not started', infoAria: 'What is this',
+    stateFinished: 'finished', stateRound: 'round {n}', stateNotStarted: 'not started',
+    ruleEdit: '✎ Edit', ruleDone: '✓ Done', ruleEditAria: 'Edit {rule}', ruleDoneAria: 'Close {rule}',
 
     round: 'Round {n}', court: 'Court {n}', play: '▶ Play', inScoreboard: 'On the scoreboard',
     gamesOf: 'Games for {name}', resting: 'Resting: {names}', nextRound: 'Create round {n}',
+    setsOf: 'Sets for {name}', setsShort: 'Sets', gamesShort: 'Games',
+    clockStart: '▶ Start', clockPause: '❚❚ Pause', clockResume: '▶ Resume', clockReset: '↺ Reset',
+    clockDone: 'Time’s up', clockAria: 'Round timer',
+    clockResetTitle: 'Reset the timer?', clockResetText: 'The round timer is running. It goes back to the start.', clockResetOk: 'Reset',
+    timeUp: 'Time is up in round {n}: the matches end with whatever the score is.',
     redo: '↻ Redo', dropRound: 'Remove',
+    correctionNote: 'Corrected. Rounds already created do not change: the correction counts in the table and in the rounds you create next.',
     rankedPending: 'The table does not have every result of round {n} yet.',
     progress: '{scored} of {total} matches played', progressApprox: '{scored} of ≈{total} matches played',
     finished: 'Tournament finished', seeTable: 'See table', goSetup: 'Go to settings',
@@ -68,6 +84,7 @@ const DICT = {
 
     colPlayer: 'Player', colTeam: 'Pair', colPlayed: 'P', colPlayedTitle: 'Matches played',
     colWon: 'W', colWonTitle: 'Matches won', colDiff: '+/−', colDiffTitle: 'Game difference',
+    colSetDiff: 'S±', colSetDiffTitle: 'Set difference',
     colPoints: 'Pts', colPointsTitle: 'Points'
   },
   es: {
@@ -94,6 +111,8 @@ const DICT = {
     replaceMatchTitle: '¿Reemplazar el partido en curso?',
     replaceMatchText: 'El marcador tiene un partido a medias. Se descarta.', replace: 'Reemplazar',
     linkedLabel: '{name} · Ronda {round} · Cancha {court}', toGames: 'a {n} juegos', freeGames: 'sin límite de juegos',
+    onTime: 'por tiempo', timeUpSaved: 'Se acabó el tiempo. Guardado en el torneo: {result}',
+    wakeLockFailed: 'La pantalla puede apagarse y entonces el aviso de fin de tiempo no sonará. Mantén la app a la vista.',
 
     tabsAria: 'Secciones', tabScore: 'Marcador', tabMatches: 'Partidos', tabTable: 'Tabla', tabSetup: 'Torneo',
 
@@ -113,21 +132,35 @@ const DICT = {
     retired: 'Fuera', restore: 'Reincorporar',
     courts: 'Canchas', limit: 'Duración', limitPerPlayer: 'Por jugador', limitRounds: 'Rondas', limitMatches: 'Partidos totales',
     unit_perPlayer: 'partidos cada uno', unit_rounds: 'rondas', unit_matches: 'partidos',
+    unit_perPlayer_one: 'partido cada uno', unit_rounds_one: 'ronda', unit_matches_one: 'partido',
+    courtsCount: '{n} canchas', courtsCount_one: '1 cancha',
     info_limit: 'Si no hay cancha para todos, se descansa por turnos para que todos jueguen los mismos partidos.',
     estimate: '≈ {matches} partidos · {rounds} rondas', estimateExact: '{matches} partidos · {rounds} rondas',
-    scoring: 'Puntos', scoringGames: 'Por juego ganado', scoringMatch: 'Por partido ganado',
-    info_scoring: 'Por juego: sumas un punto por cada juego que gana tu lado. Por partido: 3 puntos por ganar y 1 por empatar.',
-    gamesPerMatch: 'Juegos por partido', free: 'Libre',
-    info_games: 'Cuando un lado llega a esa cifra en el marcador, te propone guardar el resultado.',
+    estimateMinutes: '{n} min',
+    scoring: 'Puntos', scoring_games: 'Por juego ganado', scoring_sets: 'Por set ganado', scoring_match: 'Por partido ganado',
+    unit_points: 'pts', pointsPer_games: '{n} por juego', pointsPer_sets: '{n} por set', pointsPer_match: '{n} por partido ganado',
+    info_scoring: 'Enciende lo que suma en la tabla, cada cosa con su valor: se suman entre sí. Un empate no da puntos de partido. Al menos una queda encendida.',
+    matchEnd: 'Fin del partido', matchEndTime: 'Por tiempo', matchEndGames: 'Por juegos', free: 'Libre',
+    unit_minutes: 'minutos', unit_games: 'juegos', unit_games_one: 'juego',
+    matchEndSummaryTime: 'Por tiempo · {n} minutos', matchEndSummaryGames: 'Por juegos · a {n} juegos',
+    matchEndSummaryGames_one: 'Por juegos · a 1 juego', matchEndSummaryFree: 'Por juegos · sin límite',
+    info_matchEnd: 'Por tiempo: cada ronda tiene un cronómetro y, cuando se acaba, los partidos terminan con el marcador que haya. Por juegos: el partido termina cuando un lado llega a esa cantidad de juegos.',
     start: 'Empezar torneo', needPlayers: 'Hacen falta al menos {n} jugadores.', needTeams: 'Hacen falta al menos {n} parejas.',
     deleteTournament: 'Borrar torneo', deleteTournamentTitle: '¿Borrar el torneo?',
     deleteTournamentText: 'Se borran «{name}», sus rondas y sus resultados.',
     myTournaments: 'Mis torneos', playersCount: '{n} jugadores', teamsCount: '{n} parejas',
-    stateFinished: 'terminado', stateRound: 'ronda {n}', stateNotStarted: 'sin empezar', infoAria: 'Qué es esto',
+    stateFinished: 'terminado', stateRound: 'ronda {n}', stateNotStarted: 'sin empezar',
+    ruleEdit: '✎ Editar', ruleDone: '✓ Listo', ruleEditAria: 'Editar {rule}', ruleDoneAria: 'Cerrar {rule}',
 
     round: 'Ronda {n}', court: 'Cancha {n}', play: '▶ Jugar', inScoreboard: 'En el marcador',
     gamesOf: 'Juegos de {name}', resting: 'Descansan: {names}', nextRound: 'Armar ronda {n}',
+    setsOf: 'Sets de {name}', setsShort: 'Sets', gamesShort: 'Juegos',
+    clockStart: '▶ Empezar', clockPause: '❚❚ Pausar', clockResume: '▶ Seguir', clockReset: '↺ Reiniciar',
+    clockDone: '¡Tiempo!', clockAria: 'Cronómetro de la ronda',
+    clockResetTitle: '¿Reiniciar el cronómetro?', clockResetText: 'El cronómetro de la ronda está corriendo. Vuelve al principio.', clockResetOk: 'Reiniciar',
+    timeUp: 'Se acabó el tiempo de la ronda {n}: los partidos terminan con el marcador que haya.',
     redo: '↻ Rehacer', dropRound: 'Quitar',
+    correctionNote: 'Corregido. Las rondas ya armadas no cambian: la corrección cuenta en la tabla y en las rondas que armes después.',
     rankedPending: 'La tabla todavía no tiene todos los resultados de la ronda {n}.',
     progress: '{scored} de {total} partidos jugados', progressApprox: '{scored} de ≈{total} partidos jugados',
     finished: 'Torneo terminado', seeTable: 'Ver tabla', goSetup: 'Ir a la configuración',
@@ -135,6 +168,7 @@ const DICT = {
 
     colPlayer: 'Jugador', colTeam: 'Pareja', colPlayed: 'PJ', colPlayedTitle: 'Partidos jugados',
     colWon: 'PG', colWonTitle: 'Partidos ganados', colDiff: '+/−', colDiffTitle: 'Diferencia de juegos',
+    colSetDiff: 'S±', colSetDiffTitle: 'Diferencia de sets',
     colPoints: 'Pts', colPointsTitle: 'Puntos'
   }
 }
@@ -166,6 +200,11 @@ export function t (key, vars) {
     if (!(k in vars)) throw new Error(`missing i18n var "${k}" for ${key}`)
     return String(vars[k])
   })
+}
+
+// Con cantidad: usa `<key>_one` cuando n es 1 («1 ronda», no «1 rondas»).
+export function tn (key, n, vars = { n }) {
+  return t(n === 1 ? key + '_one' : key, vars)
 }
 
 export function applyStatic (root = document) {
