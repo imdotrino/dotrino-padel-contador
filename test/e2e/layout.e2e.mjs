@@ -150,7 +150,7 @@ test('móvil: el marcador no se encima y el torneo va en una columna', async t =
   }
 })
 
-test('Mis torneos: arriba de todo, y el más nuevo primero aunque se juegue en uno viejo', async () => {
+test('Mis torneos: arriba de todo, el más nuevo primero aunque se juegue en uno viejo, y elegir uno se queda en Torneo', async () => {
   const { ctx, page, errors } = await openApp(browser, { width: 390, height: 844, mobile: true })
   try {
     const make = async name => {
@@ -165,8 +165,12 @@ test('Mis torneos: arriba de todo, y el más nuevo primero aunque se juegue en u
     await make('Segundo')
     // Anotar en el viejo lo guarda después del nuevo, pero no lo sube: manda cuándo se creó.
     await page.click('[data-testid="tab-setup"]')
+    // Elegirlo no lleva a Partidos: se queda en Torneo, donde se edita.
     await page.locator('[data-testid="open-tournament"]', { hasText: 'Primero' }).click()
-    await page.waitForSelector('#view-matches:not([hidden])')
+    await page.waitForSelector('#setupPage .history-row.current:has-text("Primero")')
+    assert.equal(await page.isVisible('#view-setup'), true, 'choosing a tournament stays on the tournament tab')
+    assert.equal(await page.textContent('[data-testid="rule-name-text"]'), 'Primero')
+    await page.click('[data-testid="tab-matches"]')
     await page.fill('#matchesPage [data-testid="score-a"]', '6')
     await page.click('[data-testid="tab-setup"]')
     assert.deepEqual(await page.locator('#setupPage .history .h-name').allTextContents(), ['Segundo', 'Primero'])

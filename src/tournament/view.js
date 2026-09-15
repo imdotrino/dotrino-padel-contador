@@ -767,6 +767,9 @@ function commit (tour) {
   renderAll()
 }
 
+// Con «Mis torneos» encima, el torneo nuevo o el elegido puede quedar fuera de la vista.
+const scrollToTournament = () => $('setupPage').querySelector('.t-head').scrollIntoView({ block: 'start', behavior: 'smooth' })
+
 function startDraft () {
   // Arranca con «Default», la regla de fábrica.
   const base = engine.builtinRulesets()[0]
@@ -774,8 +777,7 @@ function startDraft () {
   openRule = null
   ruleForm = null
   ui.goTab('setup')
-  // Con «Mis torneos» encima, el torneo nuevo puede quedar fuera de la vista.
-  $('setupPage').querySelector('.t-head').scrollIntoView({ block: 'start', behavior: 'smooth' })
+  scrollToTournament()
 }
 
 // Pone unas reglas en el torneo. Si cambian el tipo de parejas y ya hay rondas, se
@@ -994,12 +996,14 @@ async function onSetupClick (e) {
     case 'update-ruleset': return updateRuleset(tour)
     case 'delete-ruleset': return deleteRuleset(b.dataset.rulesetId)
     case 'open':
+      // Se queda en Torneo: el elegido se edita aquí mismo (dueño, 2026-09-15).
       draft = null
+      openRule = null
       ruleForm = null
       await repo.setActive(b.closest('[data-tournament]').dataset.tournament)
       resumeLive()
       renderAll()
-      return ui.goTab('matches')
+      return scrollToTournament()
     case 'remove-player':
       engine.removePlayer(tour, b.closest('[data-player]').dataset.player)
       return commit(tour)
