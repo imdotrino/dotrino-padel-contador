@@ -5,7 +5,7 @@ import {
   setScore, nextRoundBlocker, redoLastRound, setPartners, removePlayer, removeTeam,
   appearances, hasResults, defaultSettings, SCORE_KINDS, setSets, outcome, toggleScoring,
   clockOf, startClock, pauseClock, resumeClock, resetClock, formatClock, migrateTournament,
-  maxCourts, courtsInUse
+  maxCourts, courtsInUse, builtinRulesets, applyRules, canApplyRules, checkSettings
 } from '../src/tournament/engine.js'
 
 // Azar con semilla, para que un fallo se pueda repetir.
@@ -250,7 +250,9 @@ test('MIGRACIÓN (se quita el 2026-10-15): a tournament saved before keeps playi
   delete old.settings.matchMinutes
   delete old.rounds[0].clock
   delete old.rounds[0].matches[0].sets
+  delete old.rulesetId
   migrateTournament(old)
+  assert.equal(old.rulesetId, null)
   assert.equal(old.settings.matchEnd, 'games')
   assert.deepEqual(SCORE_KINDS.filter(k => old.settings.scoring[k].on), ['match'])
   assert.equal(old.settings.scoring.match.points, 3)
@@ -286,6 +288,29 @@ test('courts in use never exceed players / 4 (pairs / 2), and are at least one',
   const fixed = createTournament({ settings: { partners: 'fixed', courts: 4 } })
   for (let i = 0; i < 5; i++) addTeam(fixed, 'A' + i, 'B' + i)
   assert.equal(courtsInUse(fixed), 2)
+})
+
+test('rule sets: built-ins are valid; applying copies the rules and never half-applies', () => {
+  const [time, games] = builtinRulesets()
+  for (const set of builtinRulesets()) checkSettings(set.settings)
+  assert.equal(time.settings.matchEnd, 'time')
+  assert.deepEqual([games.settings.matchEnd, games.settings.gamesPerMatch], ['games', 6])
+  assert.notEqual(builtinRulesets()[0].settings, time.settings, 'each call gives fresh objects')
+
+  const t = withPlayers(8, { courts: 2 })
+  applyRules(t, games.settings)
+  assert.equal(t.settings.matchEnd, 'games')
+  games.settings.gamesPerMatch = 9 // editar el set después no toca el torneo
+  games.settings.scoring.sets.on = true
+  assert.equal(t.settings.gamesPerMatch, 6)
+  assert.equal(t.settings.scoring.sets.on, false)
+
+  t.rounds.push(generateRound(t, seeded(1)))
+  setScore(t, t.rounds[0].matches[0].id, 6, 2)
+  const fixed = { ...defaultSettings(), partners: 'fixed', matchEnd: 'time' }
+  assert.equal(canApplyRules(t, fixed), false)
+  assert.throws(() => applyRules(t, fixed), /locked/)
+  assert.deepEqual([t.settings.partners, t.settings.matchEnd], ['rotating', 'games'], 'nothing half-applied')
 })
 
 test('a partial score does not count', () => {

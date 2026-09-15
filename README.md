@@ -5,7 +5,7 @@
 `padel.dotrino.com`. Cuatro pestañas bajo el topbar:
 
 - **Marcador** — dos paneles táctiles con puntuación de tenis (0/15/30/40, juegos y sets), saque, tie-break, ventaja / doble ventaja / punto de oro, deshacer y resultados guardados.
-- **Partidos**, **Tabla** y **Torneo** — torneo todos contra todos con parejas que **rotan** (mínimo 4 jugadores) o **fijas** (mínimo 3 parejas); se arman **al azar** sin repetir pareja o **por puntaje** (1.º+4.º contra 2.º+3.º); canchas configurables con descansos por turnos; duración por partidos por jugador, rondas o partidos totales. Cada partido termina **por tiempo** (cronómetro de la ronda, 20 min por defecto; al acabarse vale el marcador que haya) o **por juegos**. La tabla suma lo que se encienda de **juego**, **set** y **partido ganado**, cada uno con sus puntos. Las reglas se leen como texto y se editan de una en una. Cada partido se puede jugar en el marcador y el resultado vuelve al torneo.
+- **Partidos**, **Tabla** y **Torneo** — torneo todos contra todos con parejas que **rotan** (mínimo 4 jugadores) o **fijas** (mínimo 3 parejas); se arman **al azar** sin repetir pareja o **por puntaje** (1.º+4.º contra 2.º+3.º); canchas configurables con descansos por turnos; duración por partidos por jugador, rondas o partidos totales. Cada partido termina **por tiempo** (cronómetro de la ronda, 20 min por defecto; al acabarse vale el marcador que haya) o **por juegos**. La tabla suma lo que se encienda de **juego**, **set** y **partido ganado**, cada uno con sus puntos. Las reglas van en **sets reutilizables** (dos de fábrica y los tuyos, guardados en tu almacén): se elige uno para el torneo, y el formulario de abajo edita el elegido o crea otro a partir de él, con cada regla escrita como texto y editable aparte. Cada partido se puede jugar en el marcador y el resultado vuelve al torneo.
 
 ## Desarrollo
 
@@ -24,7 +24,7 @@ npm run build    # dist/
 | Archivo | Qué hace |
 |---|---|
 | `src/tournament/engine.js` | lógica pura: generar rondas, descansos, clasificación, límites |
-| `src/tournament/repo.js` | torneos en `@dotrino/store` (hilos `padel.tournaments` y `padel.meta`) |
+| `src/tournament/repo.js` | torneos y sets de reglas en `@dotrino/store` (hilos `padel.tournaments`, `padel.meta` y `padel.rulesets`) |
 | `src/tournament/view.js` | pestañas Partidos, Tabla y Torneo |
 | `src/scoreboard.js` | el marcador; el partido en curso en `localStorage` (volátil), los resultados en el store (`padel.results`) |
 | `src/main.js` | pestañas, topbar, «volver», identidad |

@@ -1,5 +1,5 @@
-// E2E del cronómetro de la ronda y de los puntos combinables. El reloj del navegador lo
-// controla Playwright: no se esperan cinco minutos de verdad.
+// E2E de los sets de reglas, el cronómetro de la ronda y los puntos combinables. El reloj
+// del navegador lo controla Playwright: no se esperan cinco minutos de verdad.
 //
 //   npm run test:e2e
 import { test, before, after } from 'node:test'
@@ -11,17 +11,45 @@ let browser
 before(async () => { browser = await chromium.launch() })
 after(async () => { await browser?.close() })
 
-test('por tiempo: al acabarse el cronómetro, el partido del marcador se guarda con lo que marca', async () => {
+test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del marcador se guarda con lo que marca', async () => {
   const { ctx, page, errors } = await openApp(browser, { width: 1280, height: 800, clock: true })
   try {
     await newTournament(page, ['Ana', 'Luis', 'Pedro', 'Juan'])
-    // Por defecto se juega por tiempo, 20 minutos: se lee como texto y se baja a 5.
-    assert.equal(await page.textContent('[data-testid="rule-matchEnd-text"]'), 'Por tiempo · 20 minutos')
+    const chosen = page.locator('[data-testid="ruleset"][aria-checked="true"]')
+    const option = name => page.locator('[data-testid="ruleset"]', { hasText: name })
+
+    // Por defecto «Americano por tiempo», 20 minutos; el formulario de abajo parte de él.
+    assert.equal(await chosen.count(), 1)
+    assert.match(await chosen.textContent(), /Americano por tiempo[\s\S]*Por tiempo · 20 minutos/)
+    assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Americano por tiempo (copia)')
+    assert.equal(await page.isVisible('[data-testid="update-ruleset"]'), false, 'built-in rules are not edited')
     assert.equal(await page.isVisible('[data-testid="matchMinutes-minus"]'), false, 'options stay closed until Edit')
+
+    // Elegir es excluyente, y el formulario toma los valores del elegido.
+    await option('Americano a 6 juegos').click()
+    assert.equal(await chosen.count(), 1)
+    assert.match(await chosen.textContent(), /Americano a 6 juegos/)
+    assert.equal(await page.textContent('[data-testid="rule-matchEnd-text"]'), 'Por juegos · a 6 juegos')
+
+    // A partir de «Americano por tiempo», un set nuevo de 10 minutos, que queda elegido…
+    await option('Americano por tiempo').click()
     await page.click('[data-testid="edit-matchEnd"]')
-    assert.equal(await page.getAttribute('[data-testid="matchEnd-time"]', 'aria-pressed'), 'true')
-    for (let i = 0; i < 3; i++) await page.click('[data-testid="matchMinutes-minus"]')
-    assert.equal(await page.textContent('[data-testid="rule-matchEnd-text"]'), 'Por tiempo · 5 minutos')
+    for (let i = 0; i < 2; i++) await page.click('[data-testid="matchMinutes-minus"]')
+    await page.click('[data-testid="edit-rulesetName"]')
+    await page.fill('[data-testid="ruleset-name"]', 'Rápido')
+    await page.click('[data-testid="save-ruleset"]')
+    await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Rápido")')
+    assert.match(await chosen.textContent(), /Por tiempo · 10 minutos/)
+    // …que después se edita a 5: se actualiza ese mismo, no aparece otro.
+    await page.click('[data-testid="edit-matchEnd"]')
+    await page.click('[data-testid="matchMinutes-minus"]')
+    await page.click('[data-testid="update-ruleset"]')
+    await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Por tiempo · 5 minutos")')
+    assert.equal(await option('Rápido').count(), 1)
+    // Guardarlo como nuevo con el mismo nombre no se deja.
+    await page.click('[data-testid="save-ruleset"]')
+    assert.match(await page.textContent('#toast'), /Ya hay unas reglas con ese nombre/)
+    assert.equal(await option('Rápido').count(), 1)
     await page.click('[data-testid="start-tournament"]')
 
     assert.equal(await page.textContent('[data-testid="clock-time"]'), '5:00')
@@ -46,7 +74,7 @@ test('por tiempo: al acabarse el cronómetro, el partido del marcador se guarda 
   }
 })
 
-test('puntos combinables: con sets, cada partido anota sets y juegos, y la tabla suma lo encendido', async () => {
+test('puntos combinables: con sets, cada partido anota sets y juegos, la tabla suma lo encendido y las reglas quedan guardadas', async () => {
   const { ctx, page, errors } = await openApp(browser, { width: 390, height: 844, mobile: true })
   try {
     await newTournament(page, ['Ana', 'Luis', 'Pedro', 'Juan'])
@@ -67,6 +95,10 @@ test('puntos combinables: con sets, cada partido anota sets y juegos, y la tabla
     assert.equal(await page.isDisabled('[data-testid="scoring-sets"]'), true)
     await page.click('[data-testid="scoring-match"]')
     assert.equal(await page.textContent('[data-testid="rule-scoring-text"]'), '3 por set · 3 por partido ganado')
+    await page.click('[data-testid="edit-rulesetName"]')
+    await page.fill('[data-testid="ruleset-name"]', 'Por sets')
+    await page.click('[data-testid="save-ruleset"]')
+    await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Por sets")')
     await page.click('[data-testid="start-tournament"]')
 
     await page.fill('#matchesPage [data-testid="sets-a"]', '2')
@@ -77,6 +109,12 @@ test('puntos combinables: con sets, cada partido anota sets y juegos, y la tabla
     assert.equal(await page.textContent('[data-testid="scoring-summary"]'), 'Puntos: 3 por set · 3 por partido ganado')
     // Ganó a por sets aunque hizo menos juegos: 2 × 3 + 3 = 9 para cada uno de a; 1 × 3 = 3 para b.
     assert.deepEqual(await page.locator('.standings .pts').allTextContents(), ['9', '9', '3', '3'])
+
+    // Las reglas quedan en tu almacén para reutilizarlas: siguen ahí al volver a abrir la app.
+    await page.waitForTimeout(800) // lo último escrito sale del búfer de guardado
+    await page.reload()
+    await page.click('[data-testid="tab-setup"]')
+    await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Por sets")', { timeout: 30000 })
     assert.deepEqual(errors, [])
   } finally {
     await ctx.close()

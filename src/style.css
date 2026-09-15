@@ -693,8 +693,49 @@ label.label { margin-bottom: 8px; }
 .rule.open .rule-edit { border-color: var(--accent); color: var(--accent); }
 .rule-editor { margin-top: 12px; }
 /* Una regla que se guarda pero no se cumple tal cual (más canchas que jugadores). */
-.rule.warn .rule-text, .rule.warn .hint { color: #f87171; }
-.setup-form > .field-roster { padding-top: 12px; }
+.rule.warn .rule-text, .rule.warn .hint, .warn-text { color: #f87171; }
+.setup-col > .field-roster { padding-top: 12px; }
+
+/* Sets de reglas: se elige uno solo, y cada uno enseña lo que activa. */
+.rulesets { display: flex; flex-direction: column; gap: 8px; }
+.ruleset-row { display: flex; align-items: flex-start; gap: 6px; }
+.ruleset {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.ruleset.on { border-color: var(--accent); background: rgba(245,158,11,.1); }
+.ruleset[disabled] { opacity: .55; cursor: default; }
+.ruleset-name { font-size: 16px; font-weight: 800; overflow-wrap: anywhere; }
+.ruleset-name::before { content: '○ '; color: var(--muted); }
+.ruleset.on .ruleset-name::before { content: '● '; color: var(--accent); }
+.ruleset-rules { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.ruleset-rules span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ruleset.on .ruleset-rules span { color: var(--text); }
+.ruleset .ruleset-rules span.warn-text { color: #f87171; border-color: #f87171; }
+
+/* El formulario del set nuevo, debajo de todo. */
+.rules-form { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); max-width: 720px; }
+.rules-form h3 { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.rules-form .actions { margin-top: 16px; }
 .row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .unit { color: var(--muted); font-size: 14px; }
 .stepper { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
@@ -800,17 +841,8 @@ label.label { margin-bottom: 8px; }
   .round-head { justify-content: flex-start; gap: 16px; }
   .round-matches { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
   .round-matches .match { margin-bottom: 0; }
-  .setup-form {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    /* La última fila es flexible: si los jugadores ocupan más alto que los ajustes, el
-       sobrante va ahí y no separa los ajustes entre sí. 9 = los hijos de la columna 1. */
-    grid-template-rows: repeat(9, auto) 1fr;
-    column-gap: 48px;
-    align-items: start;
-  }
-  .setup-form > * { grid-column: 1; }
-  .setup-form > .field-roster { grid-column: 2; grid-row: 1 / -1; }
+  /* Nombre y jugadores | reglas elegidas y acciones. */
+  .setup-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 48px; align-items: start; }
   .roster-players { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 10px; }
   .history ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px 12px; }
 }

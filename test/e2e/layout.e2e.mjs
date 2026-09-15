@@ -100,7 +100,7 @@ const tournamentLayout = page => page.evaluate(() => {
     overflowX: view.scrollWidth > view.clientWidth + 1,
     matchTops: [...document.querySelectorAll('#matchesPage .round:first-child .match')].map(m => Math.round(r(m).top)),
     roster: document.querySelector('#setupPage .field-roster') && r(document.querySelector('#setupPage .field-roster')).toJSON(),
-    name: document.querySelector('#setupPage [data-rule="name"]') && r(document.querySelector('#setupPage [data-rule="name"]')).toJSON()
+    choice: document.querySelector('#setupPage [data-testid="rules-choice"]') && r(document.querySelector('#setupPage [data-testid="rules-choice"]')).toJSON()
   }
 })
 
@@ -111,9 +111,9 @@ async function checkTabs (page, wide) {
     assert.equal(l.overflowX, false, `${tab}: horizontal overflow`)
     if (tab === 'matches' && wide) assert.equal(new Set(l.matchTops).size, 1, `matches of a round should share a row: ${l.matchTops}`)
     if (tab === 'matches' && !wide) assert.equal(new Set(l.matchTops).size, l.matchTops.length, `matches should stack on mobile: ${l.matchTops}`)
-    if (tab === 'setup') assert.ok(l.roster && l.name, 'setup: players field or tournament name missing')
-    if (tab === 'setup' && wide) assert.ok(l.roster.left >= l.name.right, 'players should sit beside the settings')
-    if (tab === 'setup' && !wide) assert.ok(l.roster.top >= l.name.bottom, 'players should go below the settings on mobile')
+    if (tab === 'setup') assert.ok(l.roster && l.choice, 'setup: players or rules missing')
+    if (tab === 'setup' && wide) assert.ok(l.choice.left >= l.roster.right, 'the rules should sit beside the players')
+    if (tab === 'setup' && !wide) assert.ok(l.choice.top >= l.roster.bottom, 'the rules should go below the players on mobile')
   }
 }
 

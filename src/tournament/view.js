@@ -1,8 +1,9 @@
 // Las tres pestañas del torneo: Partidos, Tabla y Torneo (la configuración).
 // Pinta con plantillas y delega los eventos en cada página, como el marcador.
 //
-// Torneo es una pantalla ADMINISTRATIVA (§5.1): sin párrafos de presentación; lo que
-// hace falta explicar va detrás de un botón (i).
+// Torneo es una pantalla ADMINISTRATIVA (§5.1): sin párrafos de presentación. Arriba el
+// nombre y los jugadores; después los sets de reglas para elegir uno; y al final el
+// formulario para armar un set nuevo, donde cada regla se lee como texto y se edita aparte.
 import { $, escapeHtml as esc } from '../dom.js'
 import { t, tn, getLang } from '../i18n.js'
 import { ask, toast } from '../ui/dialog.js'
@@ -13,10 +14,11 @@ import * as repo from './repo.js'
 let ui = null // { goTab, playMatch, linkedMatchId }
 let draft = null // torneo que se está creando: no existe en el store hasta «Empezar»
 let openRule = null // la regla que se está editando, una a la vez
+let ruleForm = null // { baseId, name, settings }: el formulario de abajo (editar el set elegido o crear uno a partir de él)
 
 const RANGES = { courts: [1, 20], limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
 const STEPS = { matchMinutes: 5 }
-const LABELS = { name: 'name', partners: 'partners', pairing: 'pairing', courts: 'courts', limit: 'limit', scoring: 'scoring', matchEnd: 'matchEnd' }
+const LABELS = { name: 'name', rulesetName: 'rulesetName', partners: 'partners', pairing: 'pairing', courts: 'courts', limit: 'limit', scoring: 'scoring', matchEnd: 'matchEnd' }
 const INFOS = new Set(['partners', 'pairing', 'limit', 'scoring', 'matchEnd'])
 const PARTNER_LABELS = { rotating: 'partnersRotating', fixed: 'partnersFixed' }
 const PAIRING_LABELS = { random: 'pairingRandom', ranked: 'pairingRanked' }
@@ -407,16 +409,20 @@ function matchEndSummary (s) {
 }
 
 // Más canchas de las que llenan los jugadores se pueden poner (son las del club), pero
-// se juega en las que caben: la regla va en rojo y lo dice. Con menos de una cancha
-// llena no se avisa aquí: ya lo dice «Empezar».
-function courtsRule (tour) {
-  const s = tour.settings
-  const max = engine.maxCourts(tour)
-  const over = max >= 1 && s.courts > max
-  const note = over
-    ? tn(engine.isFixed(tour) ? 'courtsOverTeams' : 'courtsOverPlayers', max, { units: engine.activeUnits(tour).length, n: max })
-    : ''
-  return rule('courts', tn('courtsCount', s.courts), () => stepper('courts', s.courts, String(s.courts)), { note, warn: over })
+// se juega en las que caben: se marca en rojo y se dice. '' si no sobran. Con menos de
+// una cancha llena no se avisa aquí: ya lo dice «Empezar».
+function courtsOver (tour, s) {
+  const probe = { ...tour, settings: s }
+  const max = engine.maxCourts(probe)
+  if (max < 1 || s.courts <= max) return ''
+  return tn(engine.isFixed(probe) ? 'courtsOverTeams' : 'courtsOverPlayers', max, { units: engine.activeUnits(probe).length, n: max })
+}
+
+// «≈ 7 partidos · 4 rondas · 80 min» con estas reglas y los jugadores de este torneo.
+function estimateText (tour, s) {
+  const est = engine.estimate({ ...tour, settings: s })
+  if (!est) return ''
+  return t(est.exact ? 'estimateExact' : 'estimate', est) + (s.matchEnd === 'time' ? ' · ' + t('estimateMinutes', { n: est.rounds * s.matchMinutes }) : '')
 }
 
 function limitEditor (s, estimateText) {
@@ -461,31 +467,117 @@ function rosterHtml (tour) {
   </div>`
 }
 
+// ---------- sets de reglas ----------
+
+// Los de la app primero y después los del usuario, en el orden en que se crearon.
+const rulesets = () => [...engine.builtinRulesets(), ...repo.state.rulesets.slice().sort((a, b) => a.createdAt - b.createdAt)]
+const rulesetName = set => (set.builtin ? t(set.nameKey) : set.name)
+
+// Lo que activa un set, en fichas cortas. La de canchas va en rojo si con los jugadores
+// de este torneo sobran canchas.
+function rulesChips (tour, s) {
+  const over = Boolean(courtsOver(tour, s))
+  return [
+    [t('partnersSummary_' + s.partners)],
+    [t('pairingSummary_' + s.pairing)],
+    [tn('courtsCount', s.courts), over],
+    [`${s.limitValue} ${tn('unit_' + s.limitType, s.limitValue)}`],
+    [scoringSummary(s)],
+    [matchEndSummary(s)]
+  ].map(([text, warn]) => `<span${warn ? ' class="warn-text"' : ''}>${esc(text)}</span>`).join('')
+}
+
+function rulesetOption (tour, set, selected) {
+  const blocked = !selected && !engine.canApplyRules(tour, set.settings)
+  const name = rulesetName(set)
+  return `<div class="ruleset-row">
+    <button type="button" role="radio" class="ruleset${selected ? ' on' : ''}" aria-checked="${selected}"
+      data-ruleset="${esc(set.id)}"${blocked ? ' disabled' : ''} data-testid="ruleset">
+      <span class="ruleset-name">${esc(name)}</span>
+      <span class="ruleset-rules">${rulesChips(tour, set.settings)}</span>
+      ${blocked ? `<span class="hint">${esc(t('rulesetBlocked'))}</span>` : ''}
+    </button>
+    ${set.builtin || !set.id
+      ? ''
+      : `<button type="button" class="icon-btn" data-action="delete-ruleset" data-ruleset-id="${esc(set.id)}"
+          aria-label="${esc(t('rulesetDelete', { name }))}" data-testid="delete-ruleset">✕</button>`}
+  </div>`
+}
+
+// Elegir uno solo. Un torneo cuyo set ya no existe (se borró, o es de antes de los sets)
+// conserva sus reglas: aparecen como una opción más, la elegida.
+function rulesChoiceHtml (tour) {
+  const sets = rulesets()
+  const own = sets.some(x => x.id === tour.rulesetId)
+    ? ''
+    : rulesetOption(tour, { id: '', name: t('rulesetOwn'), settings: tour.settings }, true)
+  const over = courtsOver(tour, tour.settings)
+  const est = estimateText(tour, tour.settings)
+  return `<section class="field rules-choice" data-testid="rules-choice">
+    <div class="field-head"><span class="label" id="rulesChoiceLabel">${esc(t('rulesH'))}</span></div>
+    <div class="rulesets" role="radiogroup" aria-labelledby="rulesChoiceLabel">
+      ${own}${sets.map(set => rulesetOption(tour, set, set.id === tour.rulesetId)).join('')}
+    </div>
+    ${est ? `<p class="hint" data-testid="estimate">${esc(est)}</p>` : ''}
+    ${over ? `<p class="hint warn-text" data-testid="courts-warning">${esc(over)}</p>` : ''}
+  </section>`
+}
+
+// El formulario parte de un set: si es del usuario se puede editar ese mismo (y lleva su
+// nombre); si es de fábrica, o son las reglas propias del torneo, solo se guarda como
+// set nuevo (y el nombre propone una copia).
+function formFrom (set, settings) {
+  const own = set && !set.builtin
+  return {
+    baseId: own ? set.id : null,
+    name: own ? set.name : t('rulesetCopyName', { name: set ? rulesetName(set) : t('rulesetOwn') }),
+    builtin: Boolean(set?.builtin),
+    settings: structuredClone(settings)
+  }
+}
+
+function formFor (tour) {
+  if (!ruleForm) ruleForm = formFrom(rulesets().find(x => x.id === tour.rulesetId), tour.settings)
+  return ruleForm
+}
+
+function rulesFormHtml (tour) {
+  const f = formFor(tour)
+  const s = f.settings
+  const est = estimateText(tour, s)
+  const over = courtsOver(tour, s)
+  const editing = Boolean(f.baseId)
+  return `<section class="rules-form" data-testid="rules-form">
+    <h3>${esc(t(editing ? 'rulesFormEditH' : 'rulesFormH'))}</h3>
+    ${f.builtin ? `<p class="hint" data-testid="builtin-note">${esc(t('rulesetBuiltinNote'))}</p>` : ''}
+    ${rule('rulesetName', f.name, () => `<input id="rulesetName" class="input" data-field="rulesetName" data-focus-key="rulesetName"
+        maxlength="40" autocomplete="off" value="${esc(f.name)}" aria-label="${esc(t('rulesetName'))}" data-testid="ruleset-name">`)}
+    ${rule('partners', t(PARTNER_LABELS[s.partners]), () => seg('partners', [['rotating', 'partnersRotating'], ['fixed', 'partnersFixed']], s.partners))}
+    ${rule('pairing', t(PAIRING_LABELS[s.pairing]), () => seg('pairing', [['random', 'pairingRandom'], ['ranked', 'pairingRanked']], s.pairing))}
+    ${rule('courts', tn('courtsCount', s.courts), () => stepper('courts', s.courts, String(s.courts)), { note: over, warn: Boolean(over) })}
+    ${rule('limit', `${s.limitValue} ${tn('unit_' + s.limitType, s.limitValue)}${est ? ' · ' + est : ''}`, () => limitEditor(s, est))}
+    ${rule('scoring', scoringSummary(s), () => scoringBody(s))}
+    ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}
+    <div class="actions">
+      ${editing ? `<button type="button" class="btn-primary" data-action="update-ruleset" data-testid="update-ruleset">${esc(t('rulesetUpdate'))}</button>` : ''}
+      <button type="button" class="${editing ? 'btn' : 'btn-primary'}" data-action="save-ruleset" data-testid="save-ruleset">${esc(t('rulesetSaveNew'))}</button>
+    </div>
+  </section>`
+}
+
 function formHtml (tour) {
-  const s = tour.settings
   const isDraft = tour === draft
-  const locked = engine.hasResults(tour)
-  const est = engine.estimate(tour)
   const blocker = engine.nextRoundBlocker(tour)
-  const estimateText = est
-    ? t(est.exact ? 'estimateExact' : 'estimate', est) + (s.matchEnd === 'time' ? ' · ' + t('estimateMinutes', { n: est.rounds * s.matchMinutes }) : '')
-    : ''
-  const limitText = tn('unit_' + s.limitType, s.limitValue, { n: s.limitValue })
   return `
     <header class="t-head"><h2>${esc(t(isDraft ? 'newTournamentH' : 'tournamentH'))}</h2></header>
     <div class="setup-form">
+    <div class="setup-col">
     ${rule('name', tour.name, () => `<input id="tourName" class="input" data-field="name" data-focus-key="name" maxlength="40"
         autocomplete="off" value="${esc(tour.name)}" aria-label="${esc(t('name'))}" data-testid="tournament-name">`)}
-    ${rule('partners', t(PARTNER_LABELS[s.partners]),
-      () => seg('partners', [['rotating', 'partnersRotating'], ['fixed', 'partnersFixed']], s.partners),
-      { editable: !locked, note: locked ? t('partnersLocked') : '' })}
-    ${rule('pairing', t(PAIRING_LABELS[s.pairing]),
-      () => seg('pairing', [['random', 'pairingRandom'], ['ranked', 'pairingRanked']], s.pairing))}
     ${rosterHtml(tour)}
-    ${courtsRule(tour)}
-    ${rule('limit', `${s.limitValue} ${limitText}${estimateText ? ' · ' + estimateText : ''}`, () => limitEditor(s, estimateText))}
-    ${rule('scoring', scoringSummary(s), () => scoringBody(s))}
-    ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}
+    </div>
+    <div class="setup-col">
+    ${rulesChoiceHtml(tour)}
     ${isDraft
       ? `<div class="actions">
           <button type="button" class="btn-primary" data-action="start" data-testid="start-tournament"${blocker ? ' disabled' : ''}>${esc(t('start'))}</button>
@@ -496,6 +588,7 @@ function formHtml (tour) {
           <button type="button" class="btn" data-action="new" data-testid="new-tournament">${esc(t('newTournament'))}</button>
           <button type="button" class="btn danger" data-action="delete" data-testid="delete-tournament">${esc(t('deleteTournament'))}</button>
         </div>`}
+    </div>
     </div>`
 }
 
@@ -523,7 +616,8 @@ function renderSetup () {
   const page = $('setupPage')
   if (storeGate(page)) return
   const tour = current()
-  withFocus(page, () => { page.innerHTML = (tour ? formHtml(tour) : emptyState()) + historyHtml() })
+  // El formulario de reglas va debajo de todo.
+  withFocus(page, () => { page.innerHTML = (tour ? formHtml(tour) : emptyState()) + historyHtml() + (tour ? rulesFormHtml(tour) : '') })
 }
 
 // El borrador solo re-pinta su página; un torneo abierto se guarda y re-pinta todo.
@@ -534,9 +628,109 @@ function commit (tour) {
 }
 
 function startDraft () {
-  draft = engine.createTournament({ name: t('defaultTournamentName', { date: formatDate(Date.now()) }) })
+  const base = engine.builtinRulesets()[0]
+  draft = engine.createTournament({ name: t('defaultTournamentName', { date: formatDate(Date.now()) }), settings: base.settings, rulesetId: base.id })
   openRule = null
+  ruleForm = null
   ui.goTab('setup')
+}
+
+// Pone unas reglas en el torneo. Si cambian el tipo de parejas y ya hay rondas, se
+// pregunta (se vuelven a sortear). false si no se aplicaron.
+async function useRules (tour, settings, rulesetId) {
+  if (!engine.canApplyRules(tour, settings)) return false
+  if (settings.partners !== tour.settings.partners && tour.rounds.length) {
+    const yes = await ask({ title: t('partnersChangeTitle'), text: t('partnersChangeText'), ok: t('change') })
+    if (!yes) return false
+  }
+  engine.applyRules(tour, settings)
+  tour.rulesetId = rulesetId
+  return true
+}
+
+// Elegir un set: sus reglas se copian al torneo, y el formulario de abajo lo carga para
+// editarlo o armar otro a partir de él. Volver a pulsar el elegido solo carga el formulario.
+async function selectRuleset (tour, id) {
+  const set = id ? rulesets().find(x => x.id === id) : null
+  if (id && !set) throw new Error(`unknown ruleset ${id}`)
+  ruleForm = formFrom(set, set ? set.settings : tour.settings)
+  if (set && set.id !== tour.rulesetId) await useRules(tour, set.settings, set.id)
+  commit(tour)
+}
+
+// El nombre hace falta y no se repite: en la lista, dos opciones iguales no se distinguen.
+function nameProblem (name, exceptId) {
+  if (!name) return 'rulesetNeedsName'
+  const taken = rulesets().some(x => x.id !== exceptId && rulesetName(x).toLowerCase() === name.toLowerCase())
+  return taken ? 'rulesetNameTaken' : null
+}
+
+function showNameProblem (key) {
+  openRule = 'rulesetName'
+  renderSetup()
+  $('rulesetName').focus()
+  toast(t(key), 'error')
+}
+
+async function storeRuleset (set) {
+  try {
+    await repo.saveRuleset(set)
+    return true
+  } catch (e) {
+    console.error('[padel] could not save the rules:', e)
+    toast(t('saveFailed', { reason: e.message }), 'error')
+    return false
+  }
+}
+
+// Guardar como set nuevo, y elegirlo para este torneo si se puede.
+async function saveRuleset (tour) {
+  const f = ruleForm
+  const name = f.name.trim()
+  const problem = nameProblem(name, null)
+  if (problem) return showNameProblem(problem)
+  const set = { id: crypto.randomUUID(), name, createdAt: Date.now(), settings: structuredClone(f.settings) }
+  if (!(await storeRuleset(set))) return
+  const chosen = await useRules(tour, set.settings, set.id)
+  ruleForm = formFrom(set, set.settings)
+  openRule = null
+  commit(tour)
+  toast(t(chosen ? 'rulesetSavedChosen' : 'rulesetSaved', { name }))
+  $('setupPage').querySelector('[data-testid="rules-choice"]').scrollIntoView({ block: 'start', behavior: 'smooth' })
+}
+
+// Guardar los cambios en el set del que partió el formulario. Si este torneo lo usa, sus
+// reglas cambian con él; los demás torneos conservan su copia.
+async function updateRuleset (tour) {
+  const f = ruleForm
+  const set = repo.state.rulesets.find(x => x.id === f.baseId)
+  if (!set) throw new Error(`unknown ruleset ${f.baseId}`)
+  const name = f.name.trim()
+  const problem = nameProblem(name, set.id)
+  if (problem) return showNameProblem(problem)
+  const next = { ...set, name, settings: structuredClone(f.settings) }
+  const inUse = tour.rulesetId === set.id
+  if (inUse && !engine.canApplyRules(tour, next.settings)) return toast(t('rulesetBlocked'), 'error')
+  if (!(await storeRuleset(next))) return
+  if (inUse) await useRules(tour, next.settings, next.id)
+  openRule = null
+  commit(tour)
+  toast(t('rulesetUpdated', { name }))
+}
+
+async function deleteRuleset (id) {
+  const set = repo.state.rulesets.find(x => x.id === id)
+  if (!set) throw new Error(`unknown ruleset ${id}`)
+  const yes = await ask({ title: t('rulesetDeleteTitle'), text: t('rulesetDeleteText', { name: set.name }), ok: t('delete'), danger: true })
+  if (!yes) return
+  try {
+    await repo.removeRuleset(id)
+  } catch (e) {
+    console.error('[padel] could not delete the rules:', e)
+    toast(t('saveFailed', { reason: e.message }), 'error')
+    return
+  }
+  renderSetup()
 }
 
 async function startTournament () {
@@ -563,31 +757,23 @@ async function deleteTournament (tour) {
   renderAll()
 }
 
-async function onSeg (name, value) {
-  const tour = current()
-  if (name === 'partners') {
-    if (value === tour.settings.partners) return
-    if (tour.rounds.length) {
-      const yes = await ask({ title: t('partnersChangeTitle'), text: t('partnersChangeText'), ok: t('change') })
-      if (!yes) return
-    }
-    engine.setPartners(tour, value)
-  } else {
-    tour.settings[name] = value
-  }
-  commit(tour)
+// Las opciones de las reglas editan el FORMULARIO (el set nuevo), nunca el torneo: al
+// torneo solo llegan reglas eligiendo un set.
+function onSeg (name, value) {
+  formFor(current()).settings[name] = value
+  renderSetup()
 }
 
 function onStep (name, delta) {
-  const tour = current()
+  const s = formFor(current()).settings
   const clamp = (v, [min, max]) => Math.min(max, Math.max(min, v))
   if (name.startsWith('points-')) {
-    const kind = tour.settings.scoring[name.slice('points-'.length)]
+    const kind = s.scoring[name.slice('points-'.length)]
     kind.points = clamp(kind.points + delta, RANGES.points)
   } else {
-    tour.settings[name] = clamp(tour.settings[name] + delta, RANGES[name])
+    s[name] = clamp(s[name] + delta, RANGES[name])
   }
-  commit(tour)
+  renderSetup()
 }
 
 function onAdd (form) {
@@ -616,14 +802,18 @@ async function onSetupClick (e) {
     openRule = openRule === edit.dataset.edit ? null : edit.dataset.edit
     renderSetup()
     if (openRule === 'name') $('tourName').focus()
+    if (openRule === 'rulesetName') $('rulesetName').focus()
     return
   }
+  const option = e.target.closest('[data-ruleset]')
+  if (option) return selectRuleset(current(), option.dataset.ruleset)
   const toggle = e.target.closest('[data-toggle-scoring]')
   if (toggle) {
-    const tour = current()
+    // toggleScoring trabaja sobre un torneo; el formulario tiene la misma forma de ajustes.
+    const f = formFor(current())
     const kind = toggle.dataset.toggleScoring
-    engine.toggleScoring(tour, kind, !tour.settings.scoring[kind].on)
-    return commit(tour)
+    engine.toggleScoring({ settings: f.settings }, kind, !f.settings.scoring[kind].on)
+    return renderSetup()
   }
   const segBtn = e.target.closest('[data-seg]')
   if (segBtn) return onSeg(segBtn.dataset.seg, segBtn.dataset.value)
@@ -640,8 +830,12 @@ async function onSetupClick (e) {
     case 'delete': return deleteTournament(repo.active())
     case 'delete-other':
       return deleteTournament(repo.state.list.find(x => x.id === b.closest('[data-tournament]').dataset.tournament))
+    case 'save-ruleset': return saveRuleset(tour)
+    case 'update-ruleset': return updateRuleset(tour)
+    case 'delete-ruleset': return deleteRuleset(b.dataset.rulesetId)
     case 'open':
       draft = null
+      ruleForm = null
       await repo.setActive(b.closest('[data-tournament]').dataset.tournament)
       renderAll()
       return ui.goTab('matches')
@@ -665,6 +859,11 @@ async function onSetupClick (e) {
 function onSetupInput (e) {
   const el = e.target
   const tour = current()
+  if (el.dataset.field === 'rulesetName') {
+    formFor(tour).name = el.value
+    $('setupPage').querySelector('[data-testid="rule-rulesetName-text"]').textContent = el.value
+    return
+  }
   if (el.dataset.field === 'name') {
     tour.name = el.value
     // Sin re-pintar (se perdería el foco): se actualiza a mano el texto de la regla.

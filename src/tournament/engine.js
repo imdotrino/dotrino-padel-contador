@@ -62,7 +62,7 @@ const key = (x, y) => (x < y ? x + '|' + y : y + '|' + x)
 const bump = (map, k) => map.set(k, (map.get(k) || 0) + 1)
 const count = (map, k) => map.get(k) || 0
 
-function checkSettings (s) {
+export function checkSettings (s) {
   if (!PARTNERS.includes(s.partners)) throw new Error(`unknown partners mode: ${s.partners}`)
   if (!PAIRINGS.includes(s.pairing)) throw new Error(`unknown pairing mode: ${s.pairing}`)
   if (!LIMITS.includes(s.limitType)) throw new Error(`unknown limit type: ${s.limitType}`)
@@ -82,14 +82,25 @@ function checkSettings (s) {
 
 // ---------- construcción ----------
 
-export function createTournament ({ name = '', settings = {}, players = [], teams = [] } = {}) {
+// Los sets de reglas que trae la app (los del usuario viven en el store). Función y no
+// constante: cada llamada da objetos nuevos, que nadie puede modificar por error.
+export function builtinRulesets () {
+  return [
+    { id: 'builtin-time', builtin: true, nameKey: 'rulesetBuiltinTime', settings: defaultSettings() },
+    { id: 'builtin-games', builtin: true, nameKey: 'rulesetBuiltinGames', settings: { ...defaultSettings(), matchEnd: 'games', gamesPerMatch: 6 } }
+  ]
+}
+
+// rulesetId: de qué set salieron las reglas (null si no salieron de ninguno).
+export function createTournament ({ name = '', settings = {}, players = [], teams = [], rulesetId = null } = {}) {
   const now = Date.now()
   return {
     id: newId(),
     name,
     createdAt: now,
     updatedAt: now,
-    settings: { ...defaultSettings(), ...settings },
+    rulesetId,
+    settings: { ...defaultSettings(), ...structuredClone(settings) },
     players,
     teams,
     rounds: []
@@ -498,6 +509,19 @@ export function setPartners (t, mode, rng = Math.random) {
   }
 }
 
+// Aplicar un set de reglas a un torneo: las reglas se COPIAN, así que editar o borrar el
+// set después no toca los torneos que ya lo usan. Cambiar el tipo de parejas con
+// resultados no se puede, y se comprueba ANTES de tocar nada: nada queda a medio aplicar.
+export const canApplyRules = (t, settings) => settings.partners === t.settings.partners || !hasResults(t)
+
+export function applyRules (t, settings, rng = Math.random) {
+  checkSettings(settings)
+  if (!canApplyRules(t, settings)) throw new Error('partners mode is locked once there are results')
+  const { partners, ...rest } = structuredClone(settings)
+  Object.assign(t.settings, rest)
+  if (partners !== t.settings.partners) setPartners(t, partners, rng)
+}
+
 // Quitar a quien ya tiene partidos programados lo RETIRA (sigue en la tabla y en sus
 // partidos, pero no entra en las rondas nuevas). A quien no jugó nada se le borra.
 export function removePlayer (t, pid) {
@@ -597,6 +621,7 @@ export function migrateTournament (t) {
   }
   if (s.matchEnd === undefined) s.matchEnd = 'games'
   if (s.matchMinutes === undefined) s.matchMinutes = defaultSettings().matchMinutes
+  if (t.rulesetId === undefined) t.rulesetId = null
   for (const r of t.rounds) {
     if (r.clock === undefined) r.clock = null
     for (const m of r.matches) if (m.sets === undefined) m.sets = null
