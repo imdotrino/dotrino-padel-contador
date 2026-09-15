@@ -14,7 +14,7 @@ let ui = null // { goTab, playMatch, linkedMatchId }
 let draft = null // torneo que se está creando: no existe en el store hasta «Empezar»
 let openRule = null // la regla que se está editando, una a la vez
 
-const RANGES = { courts: [1, 20], limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
+const RANGES = { limitValue: [1, 99], gamesPerMatch: [0, 20], matchMinutes: [5, 120], points: [1, 10] }
 const STEPS = { matchMinutes: 5 }
 const LABELS = { name: 'name', partners: 'partners', pairing: 'pairing', courts: 'courts', limit: 'limit', scoring: 'scoring', matchEnd: 'matchEnd' }
 const INFOS = new Set(['partners', 'pairing', 'limit', 'scoring', 'matchEnd'])
@@ -404,6 +404,17 @@ function matchEndSummary (s) {
   throw new Error(`unknown match end: ${s.matchEnd}`)
 }
 
+// Las canchas: el tope son las que caben con los jugadores de ahora, y se dice cuántas.
+function courtsEditor (tour) {
+  const inUse = engine.courtsInUse(tour)
+  const max = engine.maxCourts(tour)
+  const fixed = engine.isFixed(tour)
+  const hint = max < 1
+    ? t(fixed ? 'needTeams' : 'needPlayers', { n: engine.minUnits(tour) })
+    : tn(fixed ? 'courtsMaxTeams' : 'courtsMaxPlayers', max, { units: engine.activeUnits(tour).length, n: max })
+  return stepper('courts', inUse, String(inUse), [1, Math.max(1, max)]) + `<p class="hint" data-testid="courts-hint">${esc(hint)}</p>`
+}
+
 function limitEditor (s, estimateText) {
   return seg('limitType', [['perPlayer', 'limitPerPlayer'], ['rounds', 'limitRounds'], ['matches', 'limitMatches']], s.limitType) +
     `<div class="row">${stepper('limitValue', s.limitValue, String(s.limitValue))}<span class="unit">${esc(tn('unit_' + s.limitType, s.limitValue))}</span></div>` +
@@ -467,7 +478,7 @@ function formHtml (tour) {
     ${rule('pairing', t(PAIRING_LABELS[s.pairing]),
       () => seg('pairing', [['random', 'pairingRandom'], ['ranked', 'pairingRanked']], s.pairing))}
     ${rosterHtml(tour)}
-    ${rule('courts', tn('courtsCount', s.courts), () => stepper('courts', s.courts, String(s.courts)))}
+    ${rule('courts', tn('courtsCount', engine.courtsInUse(tour)), () => courtsEditor(tour))}
     ${rule('limit', `${s.limitValue} ${limitText}${estimateText ? ' · ' + estimateText : ''}`, () => limitEditor(s, estimateText))}
     ${rule('scoring', scoringSummary(s), () => scoringBody(s))}
     ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}
@@ -569,6 +580,9 @@ function onStep (name, delta) {
   if (name.startsWith('points-')) {
     const kind = tour.settings.scoring[name.slice('points-'.length)]
     kind.points = clamp(kind.points + delta, RANGES.points)
+  } else if (name === 'courts') {
+    // Se cuenta desde las que se usan: con 9 jugadores y 3 guardadas, «−» deja 1, no 2.
+    tour.settings.courts = clamp(engine.courtsInUse(tour) + delta, [1, Math.max(1, engine.maxCourts(tour))])
   } else {
     tour.settings[name] = clamp(tour.settings[name] + delta, RANGES[name])
   }

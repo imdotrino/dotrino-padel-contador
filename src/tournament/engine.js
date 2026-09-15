@@ -120,6 +120,14 @@ export function activeUnits (t) {
   return (isFixed(t) ? t.teams : t.players).filter(u => u.active).map(u => u.id)
 }
 
+// Canchas que caben: cuatro jugadores por cancha (dos parejas si son fijas).
+export const maxCourts = t => Math.floor(activeUnits(t).length / slotsPerMatch(t))
+
+// Las canchas que se usan: las que hay (`settings.courts`), nunca más de las que caben, y
+// al menos una. El ajuste guarda las que tiene el club; si faltan jugadores se usan menos,
+// y si vuelven, vuelven a caber.
+export const courtsInUse = t => Math.max(1, Math.min(t.settings.courts, maxCourts(t)))
+
 export const hasScore = m =>
   m.score != null && Number.isInteger(m.score.a) && Number.isInteger(m.score.b)
 
@@ -386,7 +394,7 @@ export function generateRound (t, rng = Math.random) {
   const h = history(t)
   const units = activeUnits(t)
   const slots = slotsPerMatch(t)
-  const courts = Math.min(t.settings.courts, Math.floor(units.length / slots))
+  const courts = courtsInUse(t)
   const { limitType, limitValue } = t.settings
   let size = courts
   if (limitType === 'matches') size = Math.min(courts, limitValue - countMatches(t))

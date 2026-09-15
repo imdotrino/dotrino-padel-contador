@@ -4,7 +4,8 @@ import {
   createTournament, addPlayer, addTeam, generateRound, standings, status, estimate,
   setScore, nextRoundBlocker, redoLastRound, setPartners, removePlayer, removeTeam,
   appearances, hasResults, defaultSettings, SCORE_KINDS, setSets, outcome, toggleScoring,
-  clockOf, startClock, pauseClock, resumeClock, resetClock, formatClock, migrateTournament
+  clockOf, startClock, pauseClock, resumeClock, resetClock, formatClock, migrateTournament,
+  maxCourts, courtsInUse
 } from '../src/tournament/engine.js'
 
 // Azar con semilla, para que un fallo se pueda repetir.
@@ -272,6 +273,19 @@ test('correcting a result of an earlier round never changes the rounds already c
   setScore(t, r1.matches[0].id, 1, 6)
   assert.equal(JSON.stringify(t.rounds[1]), snapshot, 'round 2 stays as it was drawn')
   assert.notDeepEqual(standings(t).map(x => x.id), table, 'the table does change')
+})
+
+test('courts in use never exceed players / 4 (pairs / 2), and are at least one', () => {
+  const t = withPlayers(9, { courts: 3 })
+  assert.equal(maxCourts(t), 2)
+  assert.equal(courtsInUse(t), 2)
+  for (const name of ['X', 'Y', 'Z']) addPlayer(t, name)
+  assert.equal(courtsInUse(t), 3, 'with 12 players the 3 courts fit again')
+  assert.equal(generateRound(t, seeded(1)).matches.length, 3)
+  assert.equal(courtsInUse(withPlayers(2, { courts: 2 })), 1)
+  const fixed = createTournament({ settings: { partners: 'fixed', courts: 4 } })
+  for (let i = 0; i < 5; i++) addTeam(fixed, 'A' + i, 'B' + i)
+  assert.equal(courtsInUse(fixed), 2)
 })
 
 test('a partial score does not count', () => {

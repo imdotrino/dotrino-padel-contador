@@ -18,6 +18,11 @@ after(async () => { await browser?.close() })
 // Un torneo con dos rondas (la primera con resultados) y el marcador en 40–AD.
 async function seed (page) {
   await newTournament(page, PLAYERS)
+  // 9 jugadores: caben 2 canchas y no se puede pedir una tercera.
+  await page.click('[data-testid="edit-courts"]')
+  assert.equal(await page.textContent('[data-testid="rule-courts-text"]'), '2 canchas')
+  assert.equal(await page.isDisabled('[data-testid="courts-plus"]'), true, '9 players fit 2 courts at most')
+  assert.equal(await page.textContent('[data-testid="courts-hint"]'), 'Con 9 jugadores caben 2 canchas como máximo.')
   await page.click('[data-testid="edit-name"]')
   await page.fill('[data-testid="tournament-name"]', 'Torneo de los jueves del club de pádel')
   assert.equal(await page.textContent('[data-testid="rule-name-text"]'), 'Torneo de los jueves del club de pádel')
