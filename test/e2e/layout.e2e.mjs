@@ -149,3 +149,30 @@ test('móvil: el marcador no se encima y el torneo va en una columna', async t =
     await ctx.close()
   }
 })
+
+test('Mis torneos: arriba de todo, y el más nuevo primero aunque se juegue en uno viejo', async () => {
+  const { ctx, page, errors } = await openApp(browser, { width: 390, height: 844, mobile: true })
+  try {
+    const make = async name => {
+      await newTournament(page, ['Ana', 'Luis', 'Pedro', 'Juan'])
+      await page.click('[data-testid="edit-name"]')
+      await page.fill('[data-testid="tournament-name"]', name)
+      await page.click('[data-testid="edit-name"]')
+      await page.click('[data-testid="start-tournament"]')
+      await page.waitForSelector('#view-matches:not([hidden])')
+    }
+    await make('Primero')
+    await make('Segundo')
+    // Anotar en el viejo lo guarda después del nuevo, pero no lo sube: manda cuándo se creó.
+    await page.click('[data-testid="tab-setup"]')
+    await page.locator('[data-testid="open-tournament"]', { hasText: 'Primero' }).click()
+    await page.waitForSelector('#view-matches:not([hidden])')
+    await page.fill('#matchesPage [data-testid="score-a"]', '6')
+    await page.click('[data-testid="tab-setup"]')
+    assert.deepEqual(await page.locator('#setupPage .history .h-name').allTextContents(), ['Segundo', 'Primero'])
+    assert.equal(await page.evaluate(() => document.getElementById('setupPage').firstElementChild.className), 'history')
+    assert.deepEqual(errors, [])
+  } finally {
+    await ctx.close()
+  }
+})

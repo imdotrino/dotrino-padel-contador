@@ -732,7 +732,8 @@ function formHtml (tour) {
 
 function historyHtml () {
   if (!repo.state.list.length) return ''
-  const list = repo.state.list.slice().sort((x, y) => y.updatedAt - x.updatedAt)
+  // El más nuevo primero, por cuándo se creó: jugar un partido viejo no lo sube (dueño, 2026-09-15).
+  const list = repo.state.list.slice().sort((x, y) => y.createdAt - x.createdAt)
   return `<section class="history"><h3>${esc(t('myTournaments'))}</h3><ul>${list.map(tour => {
     const st = engine.status(tour)
     const size = engine.isFixed(tour)
@@ -755,8 +756,8 @@ function renderSetup () {
   if (watching) { page.innerHTML = watchBanner(); return }
   if (storeGate(page)) return
   const tour = current()
-  // El formulario de reglas va debajo de todo.
-  withFocus(page, () => { page.innerHTML = (tour ? formHtml(tour) : emptyState()) + historyHtml() + (tour ? rulesFormHtml(tour) : '') })
+  // «Mis torneos» arriba de todo (dueño, 2026-09-15); el formulario de reglas, debajo de todo.
+  withFocus(page, () => { page.innerHTML = historyHtml() + (tour ? formHtml(tour) : emptyState()) + (tour ? rulesFormHtml(tour) : '') })
 }
 
 // El borrador solo re-pinta su página; un torneo abierto se guarda y re-pinta todo.
@@ -773,6 +774,8 @@ function startDraft () {
   openRule = null
   ruleForm = null
   ui.goTab('setup')
+  // Con «Mis torneos» encima, el torneo nuevo puede quedar fuera de la vista.
+  $('setupPage').querySelector('.t-head').scrollIntoView({ block: 'start', behavior: 'smooth' })
 }
 
 // Pone unas reglas en el torneo. Si cambian el tipo de parejas y ya hay rondas, se

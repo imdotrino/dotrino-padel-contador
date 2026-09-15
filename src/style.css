@@ -785,7 +785,8 @@ label.label { margin-bottom: 8px; }
 
 .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 
-.history { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); }
+/* Va arriba de todo en la pestaña Torneo: el separador, debajo. */
+.history { margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .history h3 { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; }
 .history ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .history-row { display: flex; align-items: center; gap: 6px; }
