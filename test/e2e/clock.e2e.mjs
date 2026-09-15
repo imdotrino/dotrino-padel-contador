@@ -67,7 +67,7 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     assert.equal(await option('Rápido').count(), 1)
     assert.equal(await option('Rápido (copia)').count(), 1)
     assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Rápido (copia)')
-    // Reglas que chocan: «Por puntaje» con «Con todos» se marcan en rojo y no se guarda.
+    // Reglas que chocan: «Por puntaje» con «Juegan con todos» se marcan en rojo y no se guarda.
     await page.click('[data-testid="edit-pairing"]')
     await page.click('[data-testid="pairing-ranked"]')
     await page.click('[data-testid="edit-limit"]')

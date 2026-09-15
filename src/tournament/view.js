@@ -508,7 +508,7 @@ function estimateText (tour, s) {
   return t(est.exact ? 'estimateExact' : 'estimate', est) + (s.matchEnd === 'time' ? ' · ' + t('estimateMinutes', { n: est.rounds * s.matchMinutes }) : '')
 }
 
-// «Con todos» / «Todos contra todos» no lleva número: sale de los jugadores del torneo, así
+// «Juegan con todos» / «Todos contra todos» no lleva número: sale de los jugadores del torneo, así
 // que el contador se ve deshabilitado con los partidos que le tocan a cada uno.
 function limitEditor (tour, s, estimateText) {
   const everyone = s.limitType === 'everyone'
@@ -519,7 +519,7 @@ function limitEditor (tour, s, estimateText) {
     `<p class="hint" data-testid="estimate">${esc(estimateText)}</p>`
 }
 
-// La duración en una frase: «3 partidos cada uno», «Con todos · 7 partidos cada uno».
+// La duración en una frase: «3 partidos cada uno», «Juegan con todos · 7 partidos cada uno».
 function limitSummary (tour, s) {
   if (s.limitType !== 'everyone') return `${s.limitValue} ${tn('unit_' + s.limitType, s.limitValue)}`
   const name = t('limitEveryone_' + s.partners)
