@@ -473,6 +473,8 @@ test('everyone and ranked do not combine', () => {
   const clash = { ...defaultSettings(), pairing: 'ranked', limitType: 'everyone' }
   assert.deepEqual(settingsConflicts(clash), ['pairing', 'limit'])
   assert.throws(() => checkSettings(clash), /conflicting rules/)
-  assert.deepEqual(settingsConflicts({ ...defaultSettings(), limitType: 'everyone' }), [])
-  assert.deepEqual(settingsConflicts({ ...defaultSettings(), pairing: 'ranked' }), [])
+  // La duración por defecto es «con todos», y con parejas al azar no choca.
+  assert.equal(defaultSettings().limitType, 'everyone')
+  assert.deepEqual(settingsConflicts(defaultSettings()), [])
+  assert.deepEqual(settingsConflicts({ ...defaultSettings(), pairing: 'ranked', limitType: 'perPlayer' }), [])
 })

@@ -38,7 +38,9 @@ export function defaultSettings () {
     partners: 'rotating',
     pairing: 'random',
     courts: 2,
-    limitType: 'perPlayer',
+    // Por defecto «con todos» («todos contra todos» si las parejas son fijas): sale del
+    // número de jugadores (dueño, 2026-09-15). `limitValue` queda para cuando se elija otra.
+    limitType: 'everyone',
     limitValue: 3,
     // Qué suma en la tabla, cada cosa con sus puntos; se combinan. Al menos una encendida.
     // El empate no es «partido ganado»: no da puntos de partido.
