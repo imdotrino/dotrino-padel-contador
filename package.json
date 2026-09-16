@@ -19,11 +19,11 @@
     "@dotrino/proxy-client": "0.22.0",
     "@dotrino/reputation": "0.12.0",
     "@dotrino/share": "0.3.0",
-    "@dotrino/store": "0.8.0",
+    "@dotrino/store": "0.9.0",
     "@dotrino/topbar": "0.10.0"
   },
   "overrides": {
-    "@dotrino/store": "0.8.0"
+    "@dotrino/store": "0.9.0"
   },
   "devDependencies": {
     "playwright": "1.62.0",
