@@ -12,18 +12,18 @@
     "test:e2e": "vite build && node --test --test-concurrency=1 test/e2e/*.e2e.mjs"
   },
   "dependencies": {
-    "@dotrino/identity": "0.90.0",
+    "@dotrino/identity": "0.91.0",
     "@dotrino/install": "0.3.1",
     "@dotrino/lobby": "0.10.0",
     "@dotrino/nav": "0.3.0",
     "@dotrino/proxy-client": "0.22.0",
     "@dotrino/reputation": "0.12.0",
     "@dotrino/share": "0.3.0",
-    "@dotrino/store": "0.10.0",
+    "@dotrino/store": "0.11.0",
     "@dotrino/topbar": "0.10.0"
   },
   "overrides": {
-    "@dotrino/store": "0.10.0"
+    "@dotrino/store": "0.11.0"
   },
   "devDependencies": {
     "playwright": "1.62.0",
