@@ -53,7 +53,6 @@
     profile>
     <button id="btnRules" class="tb-action" data-i18n="rulesBtn" data-testid="rules-btn">📐 Rules</button>
     <button id="btnResults" class="tb-action" data-i18n="results" data-testid="results-btn">📋 Results</button>
-    <button id="btnOptions" class="tb-action tb-icon" data-i18n-title="optionsTitle" data-i18n-aria="optionsTitle" data-testid="options-btn">☰</button>
     <dotrino-install slot="end" class="cc-install sm"></dotrino-install>
   </dotrino-topbar>
 
@@ -66,6 +65,9 @@
   </nav>
 
   <section class="view view-score" id="view-score" role="tabpanel" aria-labelledby="tab-score">
+    <button type="button" class="match-options" id="btnOptions" data-i18n-title="optionsTitle" data-i18n-aria="optionsTitle" data-testid="options-btn">
+      <span class="match-options-text" id="matchOptionsText"></span><span class="match-options-edit" aria-hidden="true">✎</span>
+    </button>
     <div class="linked-bar" id="linkedBar" hidden>
       <span class="linked-label" id="linkedLabel" data-testid="linked-label"></span>
       <button class="linked-leave" id="btnLeaveLinked" data-i18n-aria="leaveLinked" data-i18n-title="leaveLinked" data-testid="leave-linked">✕</button>

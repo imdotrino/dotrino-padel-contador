@@ -4,11 +4,12 @@
 
 const DICT = {
   en: {
-    results: '📋 Results', optionsTitle: 'Scoreboard options', editName: 'Edit name',
+    results: '📋 Results', optionsTitle: 'Edit the match options', editName: 'Edit name',
     undo: '↶ Undo', serveBtn: '⇄ Serve', newMatch: '+ New', saveResult: '✓ Save',
     resultsH: 'Results', optionsH: 'Options', close: 'Close', cancel: 'Cancel',
     matchSets: 'Match sets', scoringMode: 'Scoring mode',
     advantage: 'Advantage', doubleAdv: 'Double advantage', golden: 'Golden point',
+    setsLabel1: 'Endless count', setsLabel3: 'Best of 3 sets', setsLabel5: 'Best of 5 sets',
     desc_advantage: 'You must win the game by two points — at 40-40 it stays deuce until someone leads by two.',
     desc_star: '<b>Star Point</b> (FIP 2026): at 40-40 you play an advantage; if it goes back to deuce, a second advantage; on a third deuce a <b>golden point</b> decides the game.',
     desc_golden: 'At 40-40 the next point decides the game (sudden death).',
@@ -126,11 +127,12 @@ const DICT = {
     colPoints: 'Pts', colPointsTitle: 'Points'
   },
   es: {
-    results: '📋 Resultados', optionsTitle: 'Opciones del marcador', editName: 'Editar nombre',
+    results: '📋 Resultados', optionsTitle: 'Editar las opciones del partido', editName: 'Editar nombre',
     undo: '↶ Deshacer', serveBtn: '⇄ Saque', newMatch: '+ Nuevo', saveResult: '✓ Guardar',
     resultsH: 'Resultados', optionsH: 'Opciones', close: 'Cerrar', cancel: 'Cancelar',
     matchSets: 'Sets del partido', scoringMode: 'Modo de puntuación',
     advantage: 'Ventaja', doubleAdv: 'Doble ventaja', golden: 'Punto de oro',
+    setsLabel1: 'Cuenta sin fin', setsLabel3: 'Al mejor de 3 sets', setsLabel5: 'Al mejor de 5 sets',
     desc_advantage: 'Hay que ganar el juego por dos puntos: en 40-40 sigue en iguales hasta que alguien saca dos de diferencia.',
     desc_star: '<b>Star Point</b> (FIP 2026): en 40-40 se juega una ventaja; si vuelve a iguales, una segunda ventaja; a la tercera igualdad un <b>punto de oro</b> define el juego.',
     desc_golden: 'En 40-40 el siguiente punto define el juego (muerte súbita).',

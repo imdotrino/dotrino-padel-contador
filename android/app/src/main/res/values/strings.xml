@@ -3,7 +3,7 @@
 <resources>
     <string name="app_name">Padel</string>
     <string name="results">📋 Results</string>
-    <string name="options_title">Scoreboard options</string>
+    <string name="options_title">Edit the match options</string>
     <string name="edit_name">Edit name</string>
     <string name="undo">↶ Undo</string>
     <string name="serve_btn">⇄ Serve</string>
@@ -38,5 +38,8 @@
     <string name="unexpected_error">Something went wrong: %1$s</string>
     <string name="sets">sets</string>
     <string name="games">games</string>
+    <string name="sets_label1">Endless count</string>
+    <string name="sets_label3">Best of 3 sets</string>
+    <string name="sets_label5">Best of 5 sets</string>
     <string name="save">Save</string>
 </resources>

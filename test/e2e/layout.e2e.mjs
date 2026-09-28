@@ -53,10 +53,13 @@ async function seed (page) {
     return !!(last.compareDocumentPosition(document.getElementById('nextBlock')) & Node.DOCUMENT_POSITION_FOLLOWING)
   }), '«Armar ronda» should go below the rounds')
 
+  await page.click('[data-testid="tab-score"]')
+  // Las opciones del partido se ven arriba del marcador, y tocarlas las edita.
+  assert.equal(await page.textContent('#matchOptionsText'), 'Punto de oro · Al mejor de 3 sets')
   await page.click('[data-testid="options-btn"]')
   await page.click('#scoringGroup [data-scoring="advantage"]')
   await page.click('#btnCloseOptions')
-  await page.click('[data-testid="tab-score"]')
+  assert.equal(await page.textContent('#matchOptionsText'), 'Ventaja · Al mejor de 3 sets')
   for (let i = 0; i < 3; i++) await page.click('#pointsLeft')
   for (let i = 0; i < 4; i++) await page.click('#pointsRight')
   assert.equal(await page.textContent('#pointsRight'), 'AD')

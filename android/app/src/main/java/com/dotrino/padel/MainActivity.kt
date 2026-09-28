@@ -66,6 +66,7 @@ class MainActivity : Activity() {
         setBackgroundColor(col(R.color.padel_bg))
         fitsSystemWindows = true
         addView(topbar())
+        addView(optionsBar())
         addView(board(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         addView(controls())
     }
@@ -80,15 +81,31 @@ class MainActivity : Activity() {
             this,
             repo = "imdotrino/dotrino-padel-contador",
             brand = DotrinoTopbar.Brand(getString(R.string.app_name), R.drawable.padel_brand),
-            actions = listOf(
-                action(getString(R.string.results).uppercase(), "results-btn") { openResults() },
-                action("☰", "options-btn") { openOptions() }.apply {
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-                    contentDescription = getString(R.string.options_title)
-                },
-            ),
+            actions = listOf(action(getString(R.string.results).uppercase(), "results-btn") { openResults() }),
         ) { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://dotrino.com/"))) }.view
     }
+
+    /** Las opciones del partido, a la vista arriba del tablero; tocarlas las edita (PWA 0.4.0). */
+    private lateinit var optionsText: TextView
+
+    private fun optionsBar(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+        setBackgroundColor(col(R.color.padel_surface))
+        setPadding(px(14), px(8), px(14), px(8))
+        tag = "options-btn"
+        contentDescription = getString(R.string.options_title)
+        setOnClickListener { openOptions() }
+        optionsText = label("", 13f, col(R.color.padel_text), bold = true).apply { isSingleLine = true; letterSpacing = 0.03f }
+        addView(optionsText)
+        addView(label("✎", 13f, col(R.color.padel_accent)).apply { setPadding(px(8), 0, 0, 0) })
+    }
+
+    private fun optionsSummary() = getString(when (config.scoring) {
+        Scoring.advantage -> R.string.advantage
+        Scoring.star -> R.string.double_adv
+        Scoring.golden -> R.string.golden
+    }) + " · " + getString(when (config.sets) { 1 -> R.string.sets_label1; 3 -> R.string.sets_label3; else -> R.string.sets_label5 })
 
     /** Lo de un lado del tablero, para repintarlo. */
     private class Panel(
@@ -311,6 +328,7 @@ class MainActivity : Activity() {
             p.name.hint = getString(if (side == Side.left) R.string.team_a else R.string.team_b).uppercase()
         }
         court.show(match.now.server, match.courtSide)
+        optionsText.text = optionsSummary()
     }
 
     private fun paintMeta(row: MetaRow, value: Int, total: Int) {
