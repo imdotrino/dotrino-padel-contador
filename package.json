@@ -1,9 +1,16 @@
 {
   "name": "padel",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Marcador de pádel y torneos de parejas rotativas o fijas del ecosistema Dotrino (Vite, sin framework).",
+  "dotrino": {
+    "platforms": [
+      "pwa",
+      "ios",
+      "android"
+    ]
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
