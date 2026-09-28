@@ -13,3 +13,5 @@ android/app/build
 ios/*.xcodeproj
 ios/build
 ios/DerivedData
+ios/Padel/Info.plist
+ios/Padel/Padel.entitlements
