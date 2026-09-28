@@ -34,3 +34,21 @@ npm run build    # dist/
 Regla del torneo: **una ronda ya generada no cambia** al editar la configuración o un resultado. Esos cambios cuentan para las rondas que se generen después. Una ronda sin resultados se puede rehacer o quitar a mano.
 
 Despliegue: push a `main` → GitHub Actions (`npm test` + build) → Pages.
+
+## Versiones nativas (Android e iOS)
+
+Padel tiene tres versiones en este repo (CONVENCIONES §16): la PWA en la raíz, `android/` e
+`ios/`. La PWA va delante; cada nativa lleva la versión de la PWA con la que está a la par.
+
+| | Versión | Qué tiene |
+|---|---|---|
+| PWA | 0.3.0 | marcador, torneos, reglas, compartir en vivo |
+| Android | 0.1.0 | el marcador (partido suelto, resultados, opciones) |
+| iOS | — | en preparación |
+
+La librería del ecosistema (`dotrino-native`: almacén, idioma, barra) es el submódulo
+`native/`. Después de clonar: `git submodule update --init`.
+
+```sh
+cd android && ./gradlew :app:testDebugUnitTest :app:assembleDebug   # APK de prueba
+```
