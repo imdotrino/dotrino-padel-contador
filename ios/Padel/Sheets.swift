@@ -9,17 +9,17 @@ struct OptionsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        SheetFrame(title: L("options_h"), onClose: { dismiss() }) {
+        SheetFrame(title: t("optionsH"), onClose: { dismiss() }) {
             VStack(alignment: .leading, spacing: 10) {
-                heading(L("match_sets"))
+                heading(t("matchSets"))
                 Segmented(options: Config.setOptions.map { ($0, "\($0)") }, selected: model.config.sets) { model.setSets($0) }
-                Text(L(model.config.sets == 1 ? "desc_sets1" : model.config.sets == 3 ? "desc_sets3" : "desc_sets5"))
+                Text(t("desc_sets\(model.config.sets)"))
                     .font(.subheadline).foregroundColor(Palette.muted)
                     .padding(.bottom, 10)
-                heading(L("scoring_mode"))
-                Segmented(options: [(Scoring.advantage, L("advantage")), (.star, L("double_adv")), (.golden, L("golden"))],
+                heading(t("scoringMode"))
+                Segmented(options: [(Scoring.advantage, t("advantage")), (.star, t("doubleAdv")), (.golden, t("golden"))],
                           selected: model.config.scoring) { model.setScoring($0) }
-                Text(L("desc_\(model.config.scoring.rawValue)"))
+                Text(t("desc_\(model.config.scoring.rawValue)"))
                     .font(.subheadline).foregroundColor(Palette.muted)
             }
         }
@@ -45,12 +45,12 @@ struct ResultsSheet: View {
     }()
 
     var body: some View {
-        SheetFrame(title: L("results_h"), onClose: { dismiss() }) {
+        SheetFrame(title: t("resultsH"), onClose: { dismiss() }) {
             VStack(alignment: .leading, spacing: 0) {
                 if let failure {
                     Text(failure).foregroundColor(Palette.muted)
                 } else if let list, list.isEmpty {
-                    Text(L("no_results")).foregroundColor(Palette.muted).padding(.vertical, 16)
+                    Text(t("noResults")).foregroundColor(Palette.muted).padding(.vertical, 16)
                 } else if let list {
                     ForEach(list) { r in row(r) }
                 }
@@ -65,7 +65,7 @@ struct ResultsSheet: View {
             failure = nil
         } catch {
             NSLog("padel: could not read results: %@", String(describing: error))
-            failure = L("results_load_failed", String(describing: error))
+            failure = t("resultsLoadFailed", ["reason": String(describing: error)])
         }
     }
 
@@ -82,12 +82,12 @@ struct ResultsSheet: View {
                     .font(.footnote).foregroundColor(Palette.muted)
             }
             Spacer()
-            Button(L("delete")) {
+            Button(t("delete")) {
                 do {
                     try model.deleteResult(r.id)
                 } catch {
                     NSLog("padel: could not delete result: %@", String(describing: error))
-                    failure = L("result_delete_failed", String(describing: error))
+                    failure = t("resultDeleteFailed", ["reason": String(describing: error)])
                     return
                 }
                 load()
@@ -113,7 +113,7 @@ struct SheetFrame<Content: View>: View {
                 Spacer()
                 Button(action: onClose) { Text("✕").font(.title2) }
                     .foregroundColor(Palette.text)
-                    .accessibilityLabel(L("close"))
+                    .accessibilityLabel(t("close"))
             }
             .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 8)
             ScrollView { content().padding(.horizontal, 20).padding(.bottom, 24) }

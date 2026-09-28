@@ -1,20 +1,19 @@
 import DotrinoNativeUI
 import SwiftUI
 
-/// El estado de la pantalla: el partido, las opciones y los resultados guardados.
+/// El estado del marcador: el partido, las opciones y los resultados guardados. Juega un
+/// partido suelto o uno del torneo (`match.link`); en el segundo, el resultado vuelve al torneo.
 @MainActor
 final class ScoreboardModel: ObservableObject {
     @Published private(set) var match: Match
     @Published private(set) var config: Config
-    @Published var error: String?
     private let repo: Repo
+    private let tours: TournamentModel
+    private var lastClock: String?
 
-    init() {
-        do {
-            repo = try Repo()
-        } catch {
-            fatalError("padel: could not open the store: \(error)")
-        }
+    init(tours: TournamentModel) {
+        do { repo = try Repo() } catch { fatalError("padel: could not open the store: \(error)") }
+        self.tours = tours
         match = repo.loadMatch()
         config = repo.loadConfig()
     }
@@ -25,7 +24,12 @@ final class ScoreboardModel: ObservableObject {
         repo.saveMatch(next)
     }
 
-    func play(_ side: Side) { update(match.winPoint(config, side)) }
+    func play(_ side: Side) {
+        let before = match.now.gameNum
+        update(match.winPoint(config, side))
+        if match.now.gameNum != before { checkLinkedTarget() }
+    }
+
     func adjust(_ side: Side, _ kind: Match.Kind, _ delta: Int) { update(match.adjust(config, side, kind, delta)) }
     func adjustPoint(_ side: Side, _ delta: Int) { update(match.adjustPoint(config, side, delta)) }
     func undo() { update(match.undo()) }
@@ -48,28 +52,115 @@ final class ScoreboardModel: ObservableObject {
         repo.saveConfig(config)
     }
 
-    /// Partido nuevo: lo jugado se guarda en tus resultados. Sin guardar no se reinicia: el
-    /// marcador sigue ahí para no perder el partido.
+    /// «Nuevo»: con un partido del torneo, guarda en el torneo; si no, lo jugado va a tus
+    /// resultados. Sin guardar no se reinicia: el marcador sigue ahí para no perder el partido.
     func newMatch() {
+        if match.link != nil { return saveLinked() }
         guard match.hasProgress else { return update(match.reset()) }
-        let r = MatchResult(
-            id: UUID().uuidString.lowercased(), date: Int64(Date().timeIntervalSince1970 * 1000),
-            left: match.names.left.isEmpty ? L("team_a") : match.names.left,
-            right: match.names.right.isEmpty ? L("team_b") : match.names.right,
-            sets: match.currentSets()
-        )
-        do {
-            try repo.saveResult(r)
-        } catch {
-            NSLog("padel: could not save result: %@", String(describing: error))
-            self.error = L("result_save_failed", String(describing: error))
-            return
+        tours.ask(t("newMatchTitle"), t("confirmNew"), t("newMatchOk")) {
+            let r = MatchResult(
+                id: UUID().uuidString.lowercased(), date: nowMs(),
+                left: self.match.names.left.isEmpty ? t("teamA") : self.match.names.left,
+                right: self.match.names.right.isEmpty ? t("teamB") : self.match.names.right,
+                sets: self.match.currentSets()
+            )
+            do {
+                try self.repo.saveResult(r)
+            } catch {
+                NSLog("padel: could not save result: %@", String(describing: error))
+                self.tours.toast = t("resultSaveFailed", ["reason": String(describing: error)])
+                return
+            }
+            self.update(self.match.reset())
         }
-        update(match.reset())
     }
 
     func results() throws -> [MatchResult] { try repo.loadResults().sorted { $0.date > $1.date } }
     func deleteResult(_ id: String) throws { try repo.deleteResult(id) }
+
+    // MARK: partido del torneo
+
+    var linkedMatchId: String? { match.link?.matchId }
+
+    /// Jugar un partido del torneo en el marcador.
+    func playLinked(_ tour: Tournament, _ m: TMatch) {
+        if match.link?.matchId == m.id { tours.tab = "score"; return }
+        guard let index = tour.rounds.firstIndex(where: { $0.matches.contains { $0.id == m.id } }) else { return }
+        let s = tour.settings
+        let link = Match.Link(
+            tournamentId: tour.id, tournamentName: tour.name, matchId: m.id, roundId: tour.rounds[index].id,
+            round: index + 1, court: m.court, timed: s.matchEnd == "time",
+            target: s.matchEnd == "games" ? s.gamesPerMatch : 0, sets: s.scoring.sets.on,
+            left: tours.sideName(tour, m.a), right: tours.sideName(tour, m.b)
+        )
+        let go = {
+            // El estado del reloj AL ENLAZAR: si ya corría y se acaba antes del primer tic, el
+            // partido igual se guarda solo.
+            self.lastClock = link.timed ? self.tours.clockForLink(link, nowMs())?.state : nil
+            self.update(Match(names: .init(left: link.left, right: link.right), link: link))
+            self.tours.tab = "score"
+        }
+        if match.hasProgress || match.link != nil {
+            tours.ask(t("replaceMatchTitle"), t("replaceMatchText"), t("replace"), danger: true, go)
+        } else { go() }
+    }
+
+    private func checkLinkedTarget() {
+        guard let l = match.link, l.target > 0 else { return }
+        if match.totalGames(.left) >= l.target || match.totalGames(.right) >= l.target { saveLinked() }
+    }
+
+    private func resultText() -> String {
+        guard let l = match.link else { return "" }
+        let sets = l.sets ? "  (SETS \(match.now.left.s)–\(match.now.right.s))" : ""
+        return "\(l.left)  \(match.totalGames(.left)) – \(match.totalGames(.right))  \(l.right)\(sets)"
+    }
+
+    private func saveLinked() {
+        guard let l = match.link else { return }
+        tours.ask(t("saveResultTitle"), resultText(), t("save"), cancel: t("keepPlaying")) {
+            // Mientras se decidía pudo acabarse el tiempo y guardarse solo.
+            if self.match.link == l { _ = self.commitLinked() }
+        }
+    }
+
+    private func commitLinked() -> Bool {
+        guard let l = match.link else { return false }
+        let saved = tours.saveLinkedResult(l, games: (match.totalGames(.left), match.totalGames(.right)),
+                                           sets: l.sets ? (match.now.left.s, match.now.right.s) : nil)
+        guard saved else { return false }
+        unlink()
+        tours.tab = "matches"
+        return true
+    }
+
+    private func unlink() {
+        lastClock = nil
+        update(Match())
+    }
+
+    func leaveLinked() {
+        tours.ask(t("leaveLinkedTitle"), t("leaveLinkedText"), t("leave"), danger: true) { self.unlink() }
+    }
+
+    func linkLabel(_ now: Int64) -> String {
+        guard let l = match.link else { return "" }
+        let head = t("linkedLabel", ["name": l.tournamentName, "round": l.round, "court": l.court])
+        if !l.timed { return head + " · " + (l.target > 0 ? t("toGames", ["n": l.target]) : t("freeGames")) }
+        guard let c = tours.clockForLink(l, now) else { return head + " · " + t("onTime") }
+        return head + " · ⏱ " + (c.state == "done" ? t("clockDone") : Engine.formatClock(c.remainingMs))
+    }
+
+    /// El tic: por tiempo, el partido del torneo se guarda solo al acabarse.
+    func tick(_ now: Int64) {
+        guard let l = match.link, l.timed else { lastClock = nil; return }
+        let before = lastClock
+        lastClock = tours.clockForLink(l, now)?.state
+        if before == "running" && lastClock == "done" {
+            let text = resultText()
+            if commitLinked() { tours.toast = t("timeUpSaved", ["result": text]) }
+        }
+    }
 }
 
 /// El marcador: la portada de la app, como en la PWA. Tocar el panel de una pareja le da el
@@ -77,21 +168,37 @@ final class ScoreboardModel: ObservableObject {
 struct ScoreboardView: View {
     @ObservedObject var model: ScoreboardModel
     @ObservedObject private var lang = DotrinoLang.shared
-    @State private var sheet: Sheet?
-    @State private var confirmNew = false
+    @State private var options = false
+    let now: Int64
 
-    enum Sheet: String, Identifiable { case results, options; var id: String { rawValue } }
+    private var scoringLabel: String {
+        t(["advantage": "advantage", "star": "doubleAdv", "golden": "golden"][model.config.scoring.rawValue]!)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            DotrinoTopbar(repo: "imdotrino/dotrino-padel-contador", brand: .init(name: "Padel", image: Image("Brand"))) {
-                Button(L("results").uppercased()) { sheet = .results }
-                    .font(.footnote.weight(.bold)).foregroundColor(Palette.muted).lineLimit(1)
-                    .accessibilityIdentifier("results-btn")
-                Button { sheet = .options } label: { Text("☰").font(.title3) }
-                    .foregroundColor(Palette.muted)
-                    .accessibilityLabel(L("options_title"))
-                    .accessibilityIdentifier("options-btn")
+            // Las opciones del partido, a la vista; tocarlas las edita. En un partido del
+            // torneo, los sets los decide el torneo: solo se ve la puntuación.
+            Button { options = true } label: {
+                HStack(spacing: 8) {
+                    Text(model.match.link != nil ? scoringLabel : "\(scoringLabel) · \(t("setsLabel\(model.config.sets)"))")
+                        .font(.footnote.weight(.heavy)).foregroundColor(Palette.text).lineLimit(1)
+                    Text("✎").font(.footnote).foregroundColor(Palette.accent)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 8).background(Palette.surface)
+            }
+            .accessibilityLabel(t("optionsTitle"))
+            .accessibilityIdentifier("options-btn")
+            if model.match.link != nil {
+                HStack {
+                    Text(model.linkLabel(now)).font(.footnote.weight(.bold)).foregroundColor(Palette.text).lineLimit(1)
+                        .accessibilityIdentifier("linked-label")
+                    Spacer()
+                    Button { model.leaveLinked() } label: { Text("✕").foregroundColor(Palette.muted).padding(8) }
+                        .accessibilityLabel(t("leaveLinked"))
+                        .accessibilityIdentifier("leave-linked")
+                }
+                .padding(.leading, 14).padding(.trailing, 4).background(Palette.surface)
             }
             ZStack(alignment: .bottom) {
                 HStack(spacing: 0) {
@@ -103,34 +210,14 @@ struct ScoreboardView: View {
                     .padding(.bottom, 40)
                     .allowsHitTesting(false)
             }
-            controls
-        }
-        .background(Palette.bg.ignoresSafeArea())
-        .preferredColorScheme(.dark)
-        .sheet(item: $sheet) { s in
-            switch s {
-            case .results: ResultsSheet(model: model)
-            case .options: OptionsSheet(model: model)
+            HStack(spacing: 0) {
+                control(t("undo")) { model.undo() }
+                control(t("serveBtn"), accent: true) { model.switchServer() }
+                control(t(model.match.link != nil ? "saveResult" : "newMatch")) { model.newMatch() }
             }
+            .background(Palette.bg)
         }
-        .alert(L("new_match_title"), isPresented: $confirmNew) {
-            Button(L("cancel"), role: .cancel) {}
-            Button(L("new_match_ok")) { model.newMatch() }
-        } message: { Text(L("confirm_new")) }
-        .alert(model.error ?? "", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("OK", role: .cancel) {}
-        }
-    }
-
-    private var controls: some View {
-        HStack(spacing: 0) {
-            control(L("undo")) { model.undo() }
-            control(L("serve_btn"), accent: true) { model.switchServer() }
-            control(L("new_match")) {
-                if model.match.hasProgress { confirmNew = true } else { model.newMatch() }
-            }
-        }
-        .background(Palette.bg)
+        .sheet(isPresented: $options) { OptionsSheet(model: model) }
     }
 
     private func control(_ text: String, accent: Bool = false, _ run: @escaping () -> Void) -> some View {
@@ -161,9 +248,9 @@ private struct TeamPanel: View {
             Spacer(minLength: 0)
             name
             if model.match.showSets(cfg) {
-                meta(.s, value: score.s, total: cfg.sets == 1 ? 0 : cfg.sets, label: L("sets"), big: true)
+                meta(.s, value: score.s, total: model.match.link != nil || cfg.sets == 1 ? 0 : cfg.sets, label: "sets", big: true)
             }
-            meta(.g, value: score.g, total: 0, label: L("games"), big: false)
+            meta(.g, value: score.g, total: 0, label: "games", big: false)
             let p = model.match.point(side)
             Text(p.text)
                 .font(.system(size: 96, weight: .heavy))
@@ -179,7 +266,7 @@ private struct TeamPanel: View {
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Palette.win).clipShape(RoundedRectangle(cornerRadius: 6))
                 .opacity(model.match.now.tiebreak ? 1 : 0)
-            Text(model.match.now.server == side ? "● \(L("serve")) \(model.match.player)" : " ")
+            Text(model.match.now.server == side ? "● \(t("serve")) \(model.match.player)" : " ")
                 .font(.headline).kerning(1.2).foregroundColor(Palette.text)
             Spacer(minLength: 0)
         }
@@ -194,7 +281,8 @@ private struct TeamPanel: View {
 
     @ViewBuilder private var name: some View {
         let current = side == .left ? model.match.names.left : model.match.names.right
-        let placeholder = L(side == .left ? "team_a" : "team_b").uppercased()
+        let placeholder = t(side == .left ? "teamA" : "teamB").uppercased()
+        let linked = model.match.link != nil
         HStack(spacing: 4) {
             if editing {
                 TextField(placeholder, text: $draft)
@@ -206,11 +294,14 @@ private struct TeamPanel: View {
                 Text(current.isEmpty ? placeholder : current)
                     .foregroundColor(current.isEmpty ? Palette.text.opacity(0.8) : Palette.text)
                     .lineLimit(1)
-                    .onTapGesture { startEditing(current) }
+                    .onTapGesture { if !linked { startEditing(current) } }
             }
+            // Jugando un partido del torneo los nombres vienen del torneo: el lápiz se deshabilita.
             Button { startEditing(current) } label: { Text("✎") }
                 .foregroundColor(Palette.text)
-                .accessibilityLabel(L("edit_name"))
+                .disabled(linked)
+                .opacity(linked ? 0.35 : 1)
+                .accessibilityLabel(t("editName"))
         }
         .font(.headline)
         .multilineTextAlignment(.center)

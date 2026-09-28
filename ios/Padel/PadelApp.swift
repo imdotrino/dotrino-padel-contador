@@ -16,7 +16,7 @@ struct PadelApp: App {
     }
 
     var body: some Scene {
-        WindowGroup { ScoreboardView(model: ScoreboardModel()) }
+        WindowGroup { AppView() }
     }
 }
 
@@ -42,8 +42,3 @@ extension Color {
     }
 }
 
-/// Un texto de la app en el idioma elegido en la barra.
-func L(_ key: String, _ args: CVarArg...) -> String {
-    let f = DotrinoLang.shared.text(key)
-    return args.isEmpty ? f : String(format: f, arguments: args)
-}

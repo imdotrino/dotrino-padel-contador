@@ -62,11 +62,33 @@ struct Match: Codable, Equatable {
 
     enum Kind { case s, g }
 
+    /// El partido del torneo que se juega en el marcador (`state.link` de la PWA); nil = suelto.
+    /// `target`: a cuántos juegos (0 = sin límite); `timed`: por tiempo; `sets`: si cuenta sets.
+    struct Link: Codable, Equatable {
+        let tournamentId: String
+        let tournamentName: String
+        let matchId: String
+        let roundId: String
+        let round: Int
+        let court: Int
+        let timed: Bool
+        let target: Int
+        let sets: Bool
+        let left: String
+        let right: String
+    }
+
     var now = Snapshot()
     var undoStack: [Snapshot] = []
     var names = Names()
+    var link: Link?
 
-    enum CodingKeys: String, CodingKey { case now, undoStack = "undo", names }
+    enum CodingKeys: String, CodingKey { case now, undoStack = "undo", names, link }
+
+    /// Juegos de un lado en todo el partido: los de los sets cerrados más los del set en curso.
+    func totalGames(_ side: Side) -> Int {
+        now.setsHistory.reduce(0) { $0 + (side == .left ? $1.left : $1.right) } + now[side].g
+    }
 
     private func push(_ next: Snapshot) -> Match {
         var m = self
@@ -75,8 +97,9 @@ struct Match: Codable, Equatable {
         return m
     }
 
-    /// Los juegos se acumulan sin cerrar sets a 1 set («cuenta sin fin»).
-    private func endless(_ c: Config) -> Bool { c.sets == 1 }
+    /// Los juegos se acumulan sin cerrar sets a 1 set («cuenta sin fin»), o en un partido del
+    /// torneo que no cuenta sets. Si el torneo puntúa por sets, su partido cierra sets de verdad.
+    private func endless(_ c: Config) -> Bool { link.map { !$0.sets } ?? (c.sets == 1) }
 
     // Puntos de diferencia para cerrar el juego según el modo:
     //  · golden    → 1: en 40-40 el siguiente punto define.
@@ -211,8 +234,8 @@ struct Match: Codable, Equatable {
         return started ? now.setsHistory + [SetScore(left: now.left.g, right: now.right.g)] : now.setsHistory
     }
 
-    /// Partido nuevo con los mismos nombres.
-    func reset() -> Match { Match(names: names) }
+    /// Partido nuevo con los mismos nombres (y el mismo partido del torneo, si lo hay).
+    func reset() -> Match { Match(names: names, link: link) }
 }
 
 /// Un resultado guardado: el mismo documento que guarda la PWA en `padel.results`.
