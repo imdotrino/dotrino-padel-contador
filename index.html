@@ -51,6 +51,7 @@
     support-repo="imdotrino/dotrino-padel-contador"
     support-discord="https://discord.gg/D648uq7cth"
     profile>
+    <button id="btnRules" class="tb-action" data-i18n="rulesBtn" data-testid="rules-btn">📐 Rules</button>
     <button id="btnResults" class="tb-action" data-i18n="results" data-testid="results-btn">📋 Results</button>
     <button id="btnOptions" class="tb-action tb-icon" data-i18n-title="optionsTitle" data-i18n-aria="optionsTitle" data-testid="options-btn">☰</button>
     <dotrino-install slot="end" class="cc-install sm"></dotrino-install>
@@ -119,6 +120,16 @@
         <button class="modal-close" id="btnCloseResults" data-i18n-aria="close">✕</button>
       </div>
       <div class="modal-body" id="resultsList"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="modalRules" role="dialog" aria-modal="true" aria-labelledby="rulesModalTitle">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2 id="rulesModalTitle" data-i18n="rulesH">Rules</h2>
+        <button class="modal-close" id="btnCloseRules" data-i18n-aria="close" data-testid="close-rules">✕</button>
+      </div>
+      <div class="modal-body" id="rulesPage"></div>
     </div>
   </div>
 

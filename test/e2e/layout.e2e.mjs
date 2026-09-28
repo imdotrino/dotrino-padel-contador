@@ -5,7 +5,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
-import { openApp, newTournament } from './app.mjs'
+import { openApp, newTournament, openRules, closeRules } from './app.mjs'
 
 const PLAYERS = ['Ana', 'Luis', 'Pedro', 'Juan', 'Sofía', 'Carla', 'Diego', 'María', 'Valentina Rodríguez']
 const DESKTOP = [[1920, 1080], [1440, 900], [1366, 768], [1280, 720], [1024, 768]]
@@ -20,6 +20,7 @@ async function seed (page) {
   await newTournament(page, PLAYERS)
   // Canchas en «Auto» por defecto: 9 jugadores / 4 = 2, sin tocar nada. En «Fijo» se pueden
   // poner 3, pero la regla va en rojo y dice que se juega en 2.
+  await openRules(page)
   const courts = page.locator('[data-testid="rule-courts"]')
   assert.equal(await page.textContent('[data-testid="rule-courts-text"]'), 'Auto · jugadores/4 · 2 canchas')
   await page.click('[data-testid="edit-courts"]')
@@ -32,6 +33,7 @@ async function seed (page) {
   assert.equal(await page.textContent('[data-testid="rule-courts-note"]'), 'Con 9 jugadores solo se llenan 2 canchas: se juega en 2.')
   await page.click('[data-testid="courts-minus"]')
   assert.doesNotMatch(await courts.getAttribute('class'), /\bwarn\b/)
+  await closeRules(page)
   await page.click('[data-testid="edit-name"]')
   await page.fill('[data-testid="tournament-name"]', 'Torneo de los jueves del club de pádel')
   assert.equal(await page.textContent('[data-testid="rule-name-text"]'), 'Torneo de los jueves del club de pádel')

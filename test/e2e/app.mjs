@@ -60,3 +60,14 @@ export async function newTournament (page, players) {
     await page.press('[data-testid="add-player"]', 'Enter')
   }
 }
+
+// El modal de reglas, desde el botón del topbar (sirve en cualquier pestaña).
+export async function openRules (page) {
+  await page.click('[data-testid="rules-btn"]')
+  await page.waitForSelector('#modalRules.open [data-testid="rules-form"]')
+}
+
+export async function closeRules (page) {
+  await page.click('[data-testid="close-rules"]')
+  await page.waitForSelector('#modalRules:not(.open)', { state: 'attached' })
+}

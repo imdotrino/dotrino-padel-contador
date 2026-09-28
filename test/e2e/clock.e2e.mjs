@@ -5,7 +5,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
-import { openApp, newTournament } from './app.mjs'
+import { openApp, newTournament, openRules, closeRules } from './app.mjs'
 
 let browser
 before(async () => { browser = await chromium.launch() })
@@ -26,10 +26,13 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     assert.equal(await chosen.count(), 1)
     assert.equal(await page.locator('[data-testid="ruleset"]').count(), 1, 'one built-in')
     assert.match(await chosen.textContent(), /Default[\s\S]*Por tiempo · 12 minutos/)
+    assert.equal(await del('Default').isDisabled(), true, 'the built-in is not deleted')
+    // Las reglas se editan en su modal, no en la pestaña Torneo.
+    assert.equal(await page.locator('#setupPage [data-testid="rules-form"]').count(), 0)
+    await openRules(page)
     assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Default')
     assert.equal(await page.isDisabled('[data-testid="update-ruleset"]'), true, 'the built-in is not edited')
     assert.equal(await page.isEnabled('[data-testid="save-ruleset"]'), true)
-    assert.equal(await del('Default').isDisabled(), true, 'the built-in is not deleted')
     assert.equal(await page.isVisible('[data-testid="builtin-note"]'), true)
     assert.equal(await page.isVisible('[data-testid="matchMinutes-minus"]'), false, 'options stay closed until Edit')
 
@@ -41,7 +44,9 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     await page.click('[data-testid="save-ruleset"]')
     await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Rápido")')
     assert.match(await chosen.textContent(), /Por tiempo · 10 minutos/)
+    assert.equal(await page.isVisible('#modalRules'), false, 'saving closes the modal')
     // …y otro «Por juegos», a partir de él.
+    await openRules(page)
     await page.click('[data-testid="edit-matchEnd"]')
     await page.click('[data-testid="matchEnd-games"]')
     await page.click('[data-testid="edit-rulesetName"]')
@@ -53,6 +58,7 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     await option('Rápido').click()
     assert.equal(await chosen.count(), 1)
     assert.match(await chosen.textContent(), /Rápido/)
+    await openRules(page)
     assert.equal(await page.textContent('[data-testid="rule-matchEnd-text"]'), 'Por tiempo · 10 minutos')
     // Editarlo a 5 y «Guardar»: se actualiza ese mismo, no aparece otro.
     await page.click('[data-testid="edit-matchEnd"]')
@@ -61,11 +67,14 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Por tiempo · 5 minutos")')
     assert.equal(await option('Rápido').count(), 1)
     // Guardarlo como nueva sin cambiar el nombre la clona como «Rápido (copia)», que queda
-    // elegida; «Rápido» sigue ahí.
+    // elegida; «Rápido» sigue ahí. El ✎ de su fila abre el modal con ese set.
+    await page.locator('.ruleset-row', { has: option('Rápido') }).locator('[data-testid="edit-ruleset"]').click()
+    await page.waitForSelector('#modalRules.open')
     await page.click('[data-testid="save-ruleset"]')
     await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Rápido (copia)")')
     assert.equal(await option('Rápido').count(), 1)
     assert.equal(await option('Rápido (copia)').count(), 1)
+    await openRules(page)
     assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Rápido (copia)')
     // Reglas que chocan: «Por puntaje» con «Juegan con todos» se marcan en rojo y no se guarda.
     await page.click('[data-testid="edit-pairing"]')
@@ -81,6 +90,7 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     await page.click('[data-testid="edit-pairing"]')
     await page.click('[data-testid="pairing-random"]')
     assert.equal(await page.locator('[data-testid="rules-conflict"]').count(), 0)
+    await closeRules(page)
     // Cada set guardado se borra con su ✕ de la lista (deshabilitado si no hay set que
     // borrar): el torneo conserva sus reglas (5 minutos) como propias, que se pueden guardar.
     // Uno que no está elegido se borra, y lo elegido no cambia.
@@ -95,6 +105,7 @@ test('sets de reglas y por tiempo: al acabarse el cronómetro, el partido del ma
     assert.equal(await option('Rápido').count(), 1, 'only the deleted set goes')
     assert.match(await chosen.textContent(), /Por tiempo · 5 minutos/)
     assert.equal(await del('Reglas de este torneo').isDisabled(), true, 'own rules have no set to delete')
+    await openRules(page)
     await page.click('[data-testid="update-ruleset"]')
     assert.match(await page.textContent('#toast'), /Reglas de este torneo actualizadas/)
     await page.click('[data-testid="start-tournament"]')
@@ -125,6 +136,7 @@ test('puntos combinables: con sets, cada partido anota sets y juegos, la tabla s
   const { ctx, page, errors } = await openApp(browser, { width: 390, height: 844, mobile: true })
   try {
     await newTournament(page, ['Ana', 'Luis', 'Pedro', 'Juan'])
+    await openRules(page)
     // Por defecto: juego y partido encendidos; set apagado. Se lee como texto.
     assert.equal(await page.textContent('[data-testid="rule-scoring-text"]'), '1 por juego · 3 por partido ganado')
     // Una regla abierta a la vez: abrir otra cierra la anterior.
@@ -156,6 +168,25 @@ test('puntos combinables: con sets, cada partido anota sets y juegos, la tabla s
     assert.equal(await page.textContent('[data-testid="scoring-summary"]'), 'Puntos: 3 por set · 3 por partido ganado')
     // Ganó a por sets aunque hizo menos juegos: 2 × 3 + 3 = 9 para cada uno de a; 1 × 3 = 3 para b.
     assert.deepEqual(await page.locator('.standings .pts').allTextContents(), ['9', '9', '3', '3'])
+
+    // Desde otra pestaña (Tabla) se abren las reglas igual.
+    await openRules(page)
+    assert.equal(await page.textContent('[data-testid="rule-rulesetName-text"]'), 'Por sets')
+    await closeRules(page)
+    // Un torneo nuevo: «Por sets» ya la usa el anterior, así que no se guarda encima; queda
+    // «Guardar nueva», y el torneo pasado conserva la suya.
+    await newTournament(page, ['Eva', 'Raúl', 'Olga', 'Tito'])
+    const sets = page.locator('.ruleset-row', { has: page.locator('.ruleset-name', { hasText: /^Por sets$/ }) })
+    await sets.locator('[data-testid="edit-ruleset"]').click()
+    await page.waitForSelector('#modalRules.open')
+    assert.match(await page.textContent('[data-testid="used-by-past"]'), /Las usa otro torneo/)
+    assert.equal(await page.isDisabled('[data-testid="update-ruleset"]'), true, 'a set used by past tournaments is not overwritten')
+    assert.equal(await page.textContent('[data-testid="save-ruleset"]'), 'Guardar nueva')
+    await page.click('[data-testid="edit-scoring"]')
+    await page.click('[data-testid="points-sets-minus"]')
+    await page.click('[data-testid="save-ruleset"]')
+    await page.waitForSelector('[data-testid="ruleset"][aria-checked="true"]:has-text("Por sets (copia)")')
+    assert.match(await sets.textContent(), /3 por set/, 'the past tournament keeps its rules')
 
     // Las reglas quedan en tu almacén para reutilizarlas: siguen ahí al volver a abrir la app.
     await page.waitForTimeout(800) // lo último escrito sale del búfer de guardado

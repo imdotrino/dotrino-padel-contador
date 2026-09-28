@@ -105,6 +105,7 @@ scoreboard.initScoreboard({
   linkedSaved: () => setTab('matches'),
   linkedClock: tournament.clockForLink
 })
+$('btnRules').addEventListener('click', () => tournament.openRules())
 const shareModal = $('shareModal')
 shareModal.addEventListener('cc-share-close', () => { shareModal.open = false })
 function openShare (url, name) {
@@ -131,6 +132,7 @@ if (viewer) {
   const watching = { state: null, status: watchBad ? 'bad-link' : 'connecting', reason: null }
   tournament.setWatching(watching)
   for (const tab of ['score', 'setup']) $('tab-' + tab).disabled = true
+  $('btnRules').disabled = true
   setTab('matches')
   if (watchRef) {
     live.watch(watchRef).then(broadcast => {
@@ -198,7 +200,7 @@ function bindModal (id) {
   new MutationObserver(sync).observe(el, { attributes: true, attributeFilter: ['class'] })
   sync()
 }
-for (const id of ['modalResults', 'modalOptions', 'modalDialog']) bindModal(id)
+for (const id of ['modalResults', 'modalOptions', 'modalRules', 'modalDialog']) bindModal(id)
 
 // Identidad (§6.1), después del primer pintado: el avatar del topbar no debe retrasar
 // el marcador.

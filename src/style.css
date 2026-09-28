@@ -56,6 +56,7 @@ dotrino-topbar {
   cursor: pointer;
 }
 .tb-action:active { color: #fff; }
+.tb-action:disabled { opacity: .4; cursor: default; }
 .tb-icon { font-size: 20px; min-width: 40px; }
 /* Botón instalar (@dotrino/install): fantasma con borde, compacto. */
 .cc-install {
@@ -755,9 +756,8 @@ label.label { margin-bottom: 8px; }
 .ruleset.on .ruleset-rules span { color: var(--text); }
 .ruleset .ruleset-rules span.warn-text { color: #f87171; border-color: #f87171; }
 
-/* El formulario del set nuevo, debajo de todo. */
-.rules-form { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); max-width: 720px; }
-.rules-form h3 { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+/* El formulario de reglas, en su modal (se abre desde cualquier pestaña). */
+#rulesPage { padding: 0 16px 16px; }
 .rules-form .actions { margin-top: 16px; }
 .row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .unit { color: var(--muted); font-size: 14px; }

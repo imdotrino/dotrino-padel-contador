@@ -2,8 +2,10 @@
 // Pinta con plantillas y delega los eventos en cada página, como el marcador.
 //
 // Torneo es una pantalla ADMINISTRATIVA (§5.1): sin párrafos de presentación. Arriba el
-// nombre y los jugadores; después los sets de reglas para elegir uno; y al final el
-// formulario para armar un set nuevo, donde cada regla se lee como texto y se edita aparte.
+// nombre y los jugadores, y después los sets de reglas para elegir uno.
+//
+// Las reglas se editan aparte, en un modal que se abre desde cualquier pestaña (el botón
+// «Reglas» del topbar, o el ✎ de cada set): cada regla se lee como texto y se edita aparte.
 import { $, escapeHtml as esc } from '../dom.js'
 import { t, tn, getLang } from '../i18n.js'
 import { ask, toast } from '../ui/dialog.js'
@@ -18,7 +20,8 @@ let ui = null // { goTab, playMatch, linkedMatchId, openShare, leaveWatch }
 let watching = null
 let draft = null // torneo que se está creando: no existe en el store hasta «Empezar»
 let openRule = null // la regla que se está editando, una a la vez
-let ruleForm = null // { source, baseId, name, settings }: el formulario de abajo (editar el set elegido o crear uno a partir de él)
+let ruleForm = null // { source, baseId, name, settings }: el formulario del modal de reglas (editar un set o crear uno a partir de él)
+let probe = null // sin torneo abierto, las reglas se miden contra uno vacío con «Default»
 // Qué torneos enseña «Mis torneos»: los de hoy por defecto (dueño, 2026-09-15). Sobrevive a
 // un refresco pero no a cerrar la pestaña, como la pestaña activa (CONVENCIONES §4).
 const PERIOD_KEY = 'padel.historyPeriod'
@@ -62,6 +65,18 @@ function unitName (tour, id) {
 const formatDate = ts => new Intl.DateTimeFormat(getLang(), { day: '2-digit', month: '2-digit' }).format(ts)
 
 const current = () => draft || repo.active()
+
+// El torneo contra el que se miden las reglas del modal (canchas que caben, duración). Sin
+// torneo, uno vacío: las reglas se pueden editar igual, y guardarlas no toca ningún torneo.
+function rulesTour () {
+  const tour = current()
+  if (tour) return tour
+  if (!probe) {
+    const base = engine.builtinRulesets()[0]
+    probe = engine.createTournament({ settings: base.settings, rulesetId: base.id })
+  }
+  return probe
+}
 
 // ---------- piezas comunes ----------
 
@@ -628,6 +643,8 @@ function rulesetOption (tour, set, selected) {
       <span class="ruleset-rules">${rulesChips(tour, set.settings)}</span>
       ${blocked ? `<span class="hint">${esc(t('rulesetBlocked'))}</span>` : ''}
     </button>
+    <button type="button" class="icon-btn" data-action="edit-ruleset" data-ruleset-id="${esc(set.id)}"
+      aria-label="${esc(t('rulesetEditAria', { name }))}" data-testid="edit-ruleset">✎</button>
     <button type="button" class="icon-btn" data-action="delete-ruleset" data-ruleset-id="${esc(set.id)}"
       aria-label="${esc(t('rulesetDelete', { name }))}" data-testid="delete-ruleset"${set.builtin || !set.id ? ' disabled' : ''}>✕</button>
   </div>`
@@ -686,19 +703,25 @@ function formFor (tour) {
   return ruleForm
 }
 
+// Los OTROS torneos que usan el set del formulario. Guardarlo encima los dejaría apuntando a
+// unas reglas que no son las que jugaron: con alguno, solo se guarda como nuevo.
+const usedByOthers = f => (f.source === 'set'
+  ? repo.state.list.filter(x => x.rulesetId === f.baseId && x !== current()).length
+  : 0)
+
 function rulesFormHtml (tour) {
   const f = formFor(tour)
   const s = f.settings
   const est = estimateText(tour, s)
   const over = courtsOver(tour, s)
   const builtin = f.source === 'builtin'
+  const others = usedByOthers(f)
   // Reglas que chocan: se pueden elegir, pero se marcan en rojo con el porqué y no se guarda.
   const conflicts = engine.settingsConflicts(s)
   const clash = key => (conflicts.includes(key)
     ? { note: t('conflictRankedEveryone', { limit: t('limitEveryone_' + s.partners) }), warn: true }
     : {})
   return `<section class="rules-form" data-testid="rules-form">
-    <h3>${esc(t('rulesFormEditH'))}</h3>
     ${rule('rulesetName', f.name, () => `<input id="rulesetName" class="input" data-field="rulesetName" data-focus-key="rulesetName"
         maxlength="40" autocomplete="off" value="${esc(f.name)}" aria-label="${esc(t('rulesetName'))}" data-testid="ruleset-name">`)}
     ${rule('partners', t(PARTNER_LABELS[s.partners]), () => seg('partners', [['rotating', 'partnersRotating'], ['fixed', 'partnersFixed']], s.partners))}
@@ -709,9 +732,10 @@ function rulesFormHtml (tour) {
     ${rule('matchEnd', matchEndSummary(s), () => matchEndBody(s))}
     ${conflicts.length ? `<p class="hint warn-text" data-testid="rules-conflict">${esc(t('rulesConflictSave'))}</p>` : ''}
     ${builtin ? `<p class="hint" data-testid="builtin-note">${esc(t('rulesetBuiltinNote'))}</p>` : ''}
+    ${others ? `<p class="hint" data-testid="used-by-past">${esc(tn('rulesetUsedByPast', others))}</p>` : ''}
     <div class="actions">
-      <button type="button" class="btn-primary" data-action="update-ruleset" data-testid="update-ruleset"${builtin || conflicts.length ? ' disabled' : ''}>${esc(t('rulesetUpdate'))}</button>
-      <button type="button" class="btn" data-action="save-ruleset" data-testid="save-ruleset"${conflicts.length ? ' disabled' : ''}>${esc(t('rulesetSaveNew'))}</button>
+      <button type="button" class="${others ? 'btn' : 'btn-primary'}" data-action="update-ruleset" data-testid="update-ruleset"${builtin || others || conflicts.length ? ' disabled' : ''}>${esc(t('rulesetUpdate'))}</button>
+      <button type="button" class="${others ? 'btn-primary' : 'btn'}" data-action="save-ruleset" data-testid="save-ruleset"${conflicts.length ? ' disabled' : ''}>${esc(t('rulesetSaveNew'))}</button>
     </div>
   </section>`
 }
@@ -777,13 +801,30 @@ function renderSetup () {
   if (watching) { page.innerHTML = watchBanner(); return }
   if (storeGate(page)) return
   const tour = current()
-  // «Mis torneos» arriba de todo (dueño, 2026-09-15); el formulario de reglas, debajo de todo.
-  withFocus(page, () => { page.innerHTML = historyHtml() + (tour ? formHtml(tour) : emptyState()) + (tour ? rulesFormHtml(tour) : '') })
+  // «Mis torneos» arriba de todo (dueño, 2026-09-15). Las reglas se editan en su modal.
+  withFocus(page, () => { page.innerHTML = historyHtml() + (tour ? formHtml(tour) : emptyState()) })
 }
 
-// El borrador solo re-pinta su página; un torneo abierto se guarda y re-pinta todo.
+const rulesOpen = () => $('modalRules').classList.contains('open')
+
+function renderRules () {
+  const page = $('rulesPage')
+  if (storeGate(page)) return
+  withFocus(page, () => { page.innerHTML = rulesFormHtml(rulesTour()) })
+}
+
+function closeRules () {
+  $('modalRules').classList.remove('open')
+}
+
+// El borrador solo re-pinta su página (y el modal de reglas); un torneo abierto se guarda y
+// re-pinta todo.
 function commit (tour) {
-  if (tour === draft) return renderSetup()
+  if (tour === draft) {
+    renderSetup()
+    if (rulesOpen()) renderRules()
+    return
+  }
   repo.save(tour)
   renderAll()
 }
@@ -814,12 +855,10 @@ async function useRules (tour, settings, rulesetId) {
   return true
 }
 
-// Elegir un set: sus reglas se copian al torneo, y el formulario de abajo lo carga para
-// editarlo o armar otro a partir de él. Volver a pulsar el elegido solo carga el formulario.
+// Elegir un set: sus reglas se copian al torneo. Editarlo es el ✎ de su fila (el modal).
 async function selectRuleset (tour, id) {
   const set = id ? rulesets().find(x => x.id === id) : null
   if (id && !set) throw new Error(`unknown ruleset ${id}`)
-  ruleForm = formFrom(set, set ? set.settings : tour.settings)
   if (set && set.id !== tour.rulesetId) await useRules(tour, set.settings, set.id)
   commit(tour)
 }
@@ -833,7 +872,7 @@ function nameProblem (name, exceptId) {
 
 function showNameProblem (key) {
   openRule = 'rulesetName'
-  renderSetup()
+  renderRules()
   $('rulesetName').focus()
   toast(t(key), 'error')
 }
@@ -849,8 +888,10 @@ async function storeRuleset (set) {
   }
 }
 
-// Guardar como set nuevo, y elegirlo para este torneo si se puede.
-async function saveRuleset (tour) {
+// Guardar como set nuevo, y elegirlo para el torneo abierto si se puede. Sin torneo, solo
+// se guarda.
+async function saveRuleset () {
+  const tour = current()
   const f = ruleForm
   // Se clona ahora: si el nombre sigue siendo el de las reglas de las que partió, la nueva
   // lleva «(copia)» para no confundirse con ellas.
@@ -860,24 +901,32 @@ async function saveRuleset (tour) {
   if (problem) return showNameProblem(problem)
   const set = { id: crypto.randomUUID(), name, createdAt: Date.now(), settings: structuredClone(f.settings) }
   if (!(await storeRuleset(set))) return
-  const chosen = await useRules(tour, set.settings, set.id)
   ruleForm = formFrom(set, set.settings)
   openRule = null
+  closeRules()
+  if (!tour) {
+    renderAll()
+    return toast(t('rulesetSavedOnly', { name }))
+  }
+  const chosen = await useRules(tour, set.settings, set.id)
   commit(tour)
   toast(t(chosen ? 'rulesetSavedChosen' : 'rulesetSaved', { name }))
-  $('setupPage').querySelector('[data-testid="rules-choice"]').scrollIntoView({ block: 'start', behavior: 'smooth' })
 }
 
 // Guardar los cambios en las reglas de las que partió el formulario. Si es un set y este
 // torneo lo usa, sus reglas cambian con él; los demás torneos conservan su copia. Si son
-// las reglas propias del torneo, cambian solo en el torneo.
-async function updateRuleset (tour) {
+// las reglas propias del torneo, cambian solo en el torneo. Un set que usan otros torneos
+// no se guarda encima: el botón está deshabilitado y queda «Guardar nueva».
+async function updateRuleset () {
+  const tour = current()
   const f = ruleForm
   if (f.source === 'builtin') throw new Error('the built-in rules cannot be changed')
+  if (usedByOthers(f)) throw new Error(`ruleset ${f.baseId} is used by other tournaments`)
   if (f.source === 'own') {
     if (!engine.canApplyRules(tour, f.settings)) return toast(t('rulesetBlocked'), 'error')
     if (!(await useRules(tour, f.settings, tour.rulesetId))) return
     openRule = null
+    closeRules()
     commit(tour)
     return toast(t('rulesetOwnUpdated'))
   }
@@ -887,12 +936,14 @@ async function updateRuleset (tour) {
   const problem = nameProblem(name, set.id)
   if (problem) return showNameProblem(problem)
   const next = { ...set, name, settings: structuredClone(f.settings) }
-  const inUse = tour.rulesetId === set.id
+  const inUse = tour?.rulesetId === set.id
   if (inUse && !engine.canApplyRules(tour, next.settings)) return toast(t('rulesetBlocked'), 'error')
   if (!(await storeRuleset(next))) return
   if (inUse) await useRules(tour, next.settings, next.id)
   openRule = null
-  commit(tour)
+  closeRules()
+  if (tour) commit(tour)
+  else renderAll()
   toast(t('rulesetUpdated', { name }))
 }
 
@@ -911,7 +962,7 @@ async function deleteRuleset (id) {
   // Si el formulario estaba sobre ese set, vuelve a partir de las reglas del torneo: si no,
   // «Guardar» apuntaría a un set que ya no existe.
   if (ruleForm?.baseId === id) ruleForm = null
-  renderSetup()
+  renderAll()
 }
 
 async function startTournament () {
@@ -941,14 +992,14 @@ async function deleteTournament (tour) {
 }
 
 // Las opciones de las reglas editan el FORMULARIO (el set nuevo), nunca el torneo: al
-// torneo solo llegan reglas eligiendo un set.
+// torneo solo llegan reglas guardándolas o eligiendo un set.
 function onSeg (name, value) {
-  formFor(current()).settings[name] = value
-  renderSetup()
+  formFor(rulesTour()).settings[name] = value
+  renderRules()
 }
 
 function onStep (name, delta) {
-  const s = formFor(current()).settings
+  const s = formFor(rulesTour()).settings
   const clamp = (v, [min, max]) => Math.min(max, Math.max(min, v))
   if (name.startsWith('points-')) {
     const kind = s.scoring[name.slice('points-'.length)]
@@ -956,7 +1007,7 @@ function onStep (name, delta) {
   } else {
     s[name] = clamp(s[name] + delta, RANGES[name])
   }
-  renderSetup()
+  renderRules()
 }
 
 function onAdd (form) {
@@ -985,23 +1036,10 @@ async function onSetupClick (e) {
     openRule = openRule === edit.dataset.edit ? null : edit.dataset.edit
     renderSetup()
     if (openRule === 'name') $('tourName').focus()
-    if (openRule === 'rulesetName') $('rulesetName').focus()
     return
   }
   const option = e.target.closest('[data-ruleset]')
   if (option) return selectRuleset(current(), option.dataset.ruleset)
-  const toggle = e.target.closest('[data-toggle-scoring]')
-  if (toggle) {
-    // toggleScoring trabaja sobre un torneo; el formulario tiene la misma forma de ajustes.
-    const f = formFor(current())
-    const kind = toggle.dataset.toggleScoring
-    engine.toggleScoring({ settings: f.settings }, kind, !f.settings.scoring[kind].on)
-    return renderSetup()
-  }
-  const segBtn = e.target.closest('[data-seg]')
-  if (segBtn) return onSeg(segBtn.dataset.seg, segBtn.dataset.value)
-  const step = e.target.closest('[data-step]')
-  if (step) return onStep(step.dataset.step, Number(step.dataset.delta))
   const b = e.target.closest('[data-action]')
   if (!b || await commonAction(b.dataset.action)) return
   const tour = current()
@@ -1013,8 +1051,7 @@ async function onSetupClick (e) {
     case 'delete': return deleteTournament(repo.active())
     case 'delete-other':
       return deleteTournament(repo.state.list.find(x => x.id === b.closest('[data-tournament]').dataset.tournament))
-    case 'save-ruleset': return saveRuleset(tour)
-    case 'update-ruleset': return updateRuleset(tour)
+    case 'edit-ruleset': return openRules(b.dataset.rulesetId)
     case 'delete-ruleset': return deleteRuleset(b.dataset.rulesetId)
     case 'open':
       // Se queda en Torneo: el elegido se edita aquí mismo (dueño, 2026-09-15).
@@ -1041,15 +1078,46 @@ async function onSetupClick (e) {
   }
 }
 
+// El modal de reglas: cada regla se abre aparte, y las opciones cambian el formulario.
+async function onRulesClick (e) {
+  const edit = e.target.closest('[data-edit]')
+  if (edit) {
+    openRule = openRule === edit.dataset.edit ? null : edit.dataset.edit
+    renderRules()
+    if (openRule === 'rulesetName') $('rulesetName').focus()
+    return
+  }
+  const toggle = e.target.closest('[data-toggle-scoring]')
+  if (toggle) {
+    // toggleScoring trabaja sobre un torneo; el formulario tiene la misma forma de ajustes.
+    const f = formFor(rulesTour())
+    const kind = toggle.dataset.toggleScoring
+    engine.toggleScoring({ settings: f.settings }, kind, !f.settings.scoring[kind].on)
+    return renderRules()
+  }
+  const segBtn = e.target.closest('[data-seg]')
+  if (segBtn) return onSeg(segBtn.dataset.seg, segBtn.dataset.value)
+  const step = e.target.closest('[data-step]')
+  if (step) return onStep(step.dataset.step, Number(step.dataset.delta))
+  const b = e.target.closest('[data-action]')
+  if (!b || await commonAction(b.dataset.action)) return
+  if (b.dataset.action === 'save-ruleset') return saveRuleset()
+  if (b.dataset.action === 'update-ruleset') return updateRuleset()
+  throw new Error(`unknown action: ${b.dataset.action}`)
+}
+
+// El nombre del set se guarda en el formulario al escribir, sin re-pintar (movería el foco).
+function onRulesInput (e) {
+  const el = e.target
+  if (el.dataset.field !== 'rulesetName') return
+  formFor(rulesTour()).name = el.value
+  $('rulesPage').querySelector('[data-testid="rule-rulesetName-text"]').textContent = el.value
+}
+
 // Nombres: se guardan al escribir, sin re-pintar (re-pintar movería el foco).
 function onSetupInput (e) {
   const el = e.target
   const tour = current()
-  if (el.dataset.field === 'rulesetName') {
-    formFor(tour).name = el.value
-    $('setupPage').querySelector('[data-testid="rule-rulesetName-text"]').textContent = el.value
-    return
-  }
   if (el.dataset.field === 'name') {
     tour.name = el.value
     // Sin re-pintar (se perdería el foco): se actualiza a mano el texto de la regla.
@@ -1105,6 +1173,27 @@ export function renderAll () {
   renderMatches()
   renderTable()
   renderSetup()
+  if (rulesOpen()) renderRules()
+}
+
+/**
+ * Abrir el modal de reglas, desde cualquier pestaña. Sin `rulesetId`, con las reglas del
+ * torneo abierto; con uno, con ese set ('' son las reglas propias del torneo).
+ */
+export function openRules (rulesetId) {
+  if (watching) throw new Error('the rules cannot be edited while watching')
+  const tour = rulesTour()
+  if (rulesetId === undefined) {
+    ruleForm = null
+  } else {
+    const set = rulesetId ? rulesets().find(x => x.id === rulesetId) : null
+    if (rulesetId && !set) throw new Error(`unknown ruleset ${rulesetId}`)
+    ruleForm = formFrom(set, set ? set.settings : tour.settings)
+  }
+  openRule = null
+  $('modalRules').classList.add('open')
+  renderRules()
+  if (repo.state.status === 'ready') renderSetup() // se cierra la regla que hubiera abierta
 }
 
 // games: [izquierda, derecha]; sets: igual, o null si el partido no contaba sets.
@@ -1177,6 +1266,10 @@ export function initTournamentViews (options) {
   $('setupPage').addEventListener('click', onSetupClick)
   $('setupPage').addEventListener('input', onSetupInput)
   $('setupPage').addEventListener('change', onSetupChange)
+  $('rulesPage').addEventListener('click', onRulesClick)
+  $('rulesPage').addEventListener('input', onRulesInput)
+  $('btnCloseRules').addEventListener('click', closeRules)
+  $('modalRules').addEventListener('click', e => { if (e.target === $('modalRules')) closeRules() })
   $('setupPage').addEventListener('submit', e => {
     e.preventDefault()
     onAdd(e.target)
