@@ -1,44 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Los textos de la app salen de la PWA (assets/i18n.json, scripts/native-i18n.mjs). Aquí solo
+     lo que el sistema lee antes de abrir la app. -->
 <resources>
     <string name="app_name">Padel</string>
-    <string name="results">📋 Resultados</string>
-    <string name="options_title">Editar las opciones del partido</string>
-    <string name="edit_name">Editar nombre</string>
-    <string name="undo">↶ Deshacer</string>
-    <string name="serve_btn">⇄ Saque</string>
-    <string name="new_match">+ Nuevo</string>
-    <string name="results_h">Resultados</string>
-    <string name="options_h">Opciones</string>
-    <string name="close">Cerrar</string>
-    <string name="cancel">Cancelar</string>
-    <string name="match_sets">Sets del partido</string>
-    <string name="scoring_mode">Modo de puntuación</string>
-    <string name="advantage">Ventaja</string>
-    <string name="double_adv">Doble ventaja</string>
-    <string name="golden">Punto de oro</string>
-    <string name="desc_advantage">Hay que ganar el juego por dos puntos: en 40-40 sigue en iguales hasta que alguien saca dos de diferencia.</string>
-    <string name="desc_star">Star Point (FIP 2026): en 40-40 se juega una ventaja; si vuelve a iguales, una segunda ventaja; a la tercera igualdad un punto de oro define el juego.</string>
-    <string name="desc_golden">En 40-40 el siguiente punto define el juego (muerte súbita).</string>
-    <string name="desc_sets1">Cuenta sin fin: los juegos se acumulan, no se cierra ningún set y no hay tie-break. El contador de sets no se muestra.</string>
-    <string name="desc_sets3">Al mejor de 3: el marcador se lee x/3.</string>
-    <string name="desc_sets5">Al mejor de 5: el marcador se lee x/5.</string>
-    <string name="serve">SAQUE</string>
-    <string name="point">punto</string>
-    <string name="team_a">Pareja A</string>
-    <string name="team_b">Pareja B</string>
-    <string name="new_match_title">Partido nuevo</string>
-    <string name="confirm_new">El marcador actual se guarda en tus resultados.</string>
-    <string name="new_match_ok">Empezar partido nuevo</string>
-    <string name="no_results">No hay resultados guardados.</string>
-    <string name="delete">Borrar</string>
-    <string name="results_load_failed">No se pudieron leer tus resultados: %1$s</string>
-    <string name="result_delete_failed">No se pudo borrar el resultado: %1$s</string>
-    <string name="result_save_failed">No se pudo guardar el resultado: %1$s</string>
-    <string name="unexpected_error">Algo falló: %1$s</string>
-    <string name="sets">sets</string>
-    <string name="games">games</string>
-    <string name="sets_label1">Cuenta sin fin</string>
-    <string name="sets_label3">Al mejor de 3 sets</string>
-    <string name="sets_label5">Al mejor de 5 sets</string>
-    <string name="save">Guardar</string>
 </resources>

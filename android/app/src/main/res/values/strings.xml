@@ -1,45 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Los textos de la PWA (src/i18n.js), en inglés. El español va en values-es. -->
+<!-- Los textos de la app salen de la PWA (assets/i18n.json, scripts/native-i18n.mjs). Aquí solo
+     lo que el sistema lee antes de abrir la app. -->
 <resources>
     <string name="app_name">Padel</string>
-    <string name="results">📋 Results</string>
-    <string name="options_title">Edit the match options</string>
-    <string name="edit_name">Edit name</string>
-    <string name="undo">↶ Undo</string>
-    <string name="serve_btn">⇄ Serve</string>
-    <string name="new_match">+ New</string>
-    <string name="results_h">Results</string>
-    <string name="options_h">Options</string>
-    <string name="close">Close</string>
-    <string name="cancel">Cancel</string>
-    <string name="match_sets">Match sets</string>
-    <string name="scoring_mode">Scoring mode</string>
-    <string name="advantage">Advantage</string>
-    <string name="double_adv">Double advantage</string>
-    <string name="golden">Golden point</string>
-    <string name="desc_advantage">You must win the game by two points — at 40-40 it stays deuce until someone leads by two.</string>
-    <string name="desc_star">Star Point (FIP 2026): at 40-40 you play an advantage; if it goes back to deuce, a second advantage; on a third deuce a golden point decides the game.</string>
-    <string name="desc_golden">At 40-40 the next point decides the game (sudden death).</string>
-    <string name="desc_sets1">Endless count: games add up with no set to close and no tie-break. The set counter is hidden.</string>
-    <string name="desc_sets3">Best of 3: the score reads x/3.</string>
-    <string name="desc_sets5">Best of 5: the score reads x/5.</string>
-    <string name="serve">SERVE</string>
-    <string name="point">point</string>
-    <string name="team_a">Team A</string>
-    <string name="team_b">Team B</string>
-    <string name="new_match_title">New match</string>
-    <string name="confirm_new">The current score will be saved to your results.</string>
-    <string name="new_match_ok">Start new match</string>
-    <string name="no_results">No saved results.</string>
-    <string name="delete">Delete</string>
-    <string name="results_load_failed">Could not read your results: %1$s</string>
-    <string name="result_delete_failed">Could not delete the result: %1$s</string>
-    <string name="result_save_failed">Could not save the result: %1$s</string>
-    <string name="unexpected_error">Something went wrong: %1$s</string>
-    <string name="sets">sets</string>
-    <string name="games">games</string>
-    <string name="sets_label1">Endless count</string>
-    <string name="sets_label3">Best of 3 sets</string>
-    <string name="sets_label5">Best of 5 sets</string>
-    <string name="save">Save</string>
 </resources>

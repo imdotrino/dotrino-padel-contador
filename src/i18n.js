@@ -2,7 +2,7 @@
 // registrarse, lo deja en <html lang> y avisa de cada cambio con 'dotrino-lang'.
 // GAME/SET/TIE-BREAK se usan igual en los dos idiomas.
 
-const DICT = {
+export const DICT = {
   en: {
     results: '📋 Results', optionsTitle: 'Edit the match options', editName: 'Edit name',
     undo: '↶ Undo', serveBtn: '⇄ Serve', newMatch: '+ New', saveResult: '✓ Save',

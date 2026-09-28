@@ -51,14 +51,39 @@ data class Match(
     val now: Snapshot = Snapshot(),
     val undo: List<Snapshot> = emptyList(),
     val names: Names = Names(),
+    /** Un partido del torneo (`state.link` de la PWA); null = partido suelto. */
+    val link: Link? = null,
 ) {
     @Serializable
     data class Names(val left: String = "", val right: String = "")
 
+    /**
+     * El partido del torneo que se juega en el marcador. `target`: a cuántos juegos (0 = sin
+     * límite); `timed`: por tiempo (el cronómetro de su ronda); `sets`: si el torneo cuenta sets.
+     */
+    @Serializable
+    data class Link(
+        val tournamentId: String,
+        val tournamentName: String,
+        val matchId: String,
+        val roundId: String,
+        val round: Int,
+        val court: Int,
+        val timed: Boolean,
+        val target: Int,
+        val sets: Boolean,
+        val left: String,
+        val right: String,
+    )
+
+    /** Juegos de un lado en todo el partido: los de los sets cerrados más los del set en curso. */
+    fun totalGames(side: Side) = now.setsHistory.sumOf { if (side == Side.left) it.left else it.right } + now[side].g
+
     private fun push(next: Snapshot) = copy(now = next, undo = undo + now)
 
-    /** Los juegos se acumulan sin cerrar sets a 1 set («cuenta sin fin»). */
-    private fun endless(c: Config) = c.sets == 1
+    /** Los juegos se acumulan sin cerrar sets a 1 set («cuenta sin fin»), o en un partido del
+     *  torneo que no cuenta sets. Si el torneo puntúa por sets, su partido cierra sets de verdad. */
+    private fun endless(c: Config) = if (link != null) !link.sets else c.sets == 1
 
     // Puntos de diferencia para cerrar el juego según el modo:
     //  · golden    → 1: en 40-40 el siguiente punto define.
@@ -178,8 +203,8 @@ data class Match(
         return if (started) s.setsHistory + SetScore(s.left.g, s.right.g) else s.setsHistory
     }
 
-    /** Partido nuevo con los mismos nombres. */
-    fun reset() = Match(names = names)
+    /** Partido nuevo con los mismos nombres (y el mismo partido del torneo, si lo hay). */
+    fun reset() = Match(names = names, link = link)
 }
 
 enum class CourtSide { R, L }

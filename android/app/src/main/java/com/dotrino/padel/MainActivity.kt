@@ -1,62 +1,110 @@
 package com.dotrino.padel
 
 import android.app.Activity
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
-import android.graphics.Typeface
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.net.Uri
 import android.os.Bundle
-import android.text.InputType
-import android.util.TypedValue
+import android.os.Handler
+import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.Gravity
-import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
-import android.widget.EditText
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
+import com.dotrino.padel.tournament.ClockState
+import com.dotrino.padel.tournament.Engine
+import com.dotrino.padel.tournament.Host
+import com.dotrino.padel.tournament.MatchesRefs
+import com.dotrino.padel.tournament.TMatch
+import com.dotrino.padel.tournament.Tournament
+import com.dotrino.padel.tournament.TournamentController
+import com.dotrino.padel.tournament.TournamentRepo
+import com.dotrino.padel.tournament.matchesTab
+import com.dotrino.padel.tournament.rulesForm
+import com.dotrino.padel.tournament.rulesTab
+import com.dotrino.padel.tournament.setupTab
+import com.dotrino.padel.tournament.tableTab
+import com.dotrino.padel.tournament.tickClocks
 import com.dotrino.sdk.ui.DotrinoLocale
 import com.dotrino.sdk.ui.DotrinoTopbar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
 
 /**
- * El marcador: la portada de la app, como en la PWA. Tocar el panel de una pareja le da el
- * punto; los +/− corrigen sets, juegos y puntos sin deshacer jugadas.
+ * La app: el marcador (la portada) y las pestañas del torneo, como la PWA. «Volver» desde una
+ * pestaña regresa al marcador; desde el marcador, sale.
  */
-class MainActivity : Activity() {
-    private lateinit var repo: Repo
-    private var match = Match()
-    private var config = Config()
-    private val scope = MainScope()
+class MainActivity : Activity(), TournamentController.Ui, Host {
+    companion object {
+        private val TABS = listOf("score", "setup", "rules", "table", "matches")
+        private val TAB_LABELS = mapOf("score" to "tabScore", "setup" to "tabSetup", "rules" to "tabRules", "table" to "tabTable", "matches" to "tabMatches")
+        private const val TAB_KEY = "tab"
+    }
 
-    private lateinit var panels: Map<Side, Panel>
-    private lateinit var court: CourtView
+    private lateinit var repo: Repo
+    private lateinit var tours: TournamentRepo
+    private lateinit var c: TournamentController
+    private lateinit var scoreboard: Scoreboard
+    private lateinit var tabPage: LinearLayout
+    private lateinit var tabScroll: ScrollView
+    private val tabButtons = mutableMapOf<String, TextView>()
+    private var tab = "score"
+    private val refs = MatchesRefs()
+    private var rulesModal: Pair<Dialog, LinearLayout>? = null
+    private val main = Handler(Looper.getMainLooper())
+    private val seenClock = mutableMapOf<String, String>()
 
     override fun attachBaseContext(base: Context) = super.attachBaseContext(DotrinoLocale.wrap(base))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        I18n.load(this)
         repo = Repo(this)
-        match = repo.loadMatch()
-        config = repo.loadConfig()
+        tours = TournamentRepo(this)
+        c = TournamentController(tours, this)
+        tours.onError = { e -> toast(t("saveFailed", "reason" to (e.message ?: e.toString())), error = true) }
+        scoreboard = Scoreboard(this, repo, object : Scoreboard.Hooks {
+            override fun saveLinked(link: Match.Link, games: Pair<Int, Int>, sets: Pair<Int, Int>?) =
+                c.saveLinkedResult(link.tournamentId, link.matchId, games, sets)
+            override fun linkedSaved() { goTab("matches"); rerender() }
+            override fun linkedClock(link: Match.Link, now: Long): ClockState? = c.clockForLink(link.tournamentId, link.roundId, now)
+        })
+        // La pestaña sobrevive a girar el teléfono, no a cerrar la app (como sessionStorage).
+        tab = savedInstanceState?.getString(TAB_KEY)?.takeIf { it in TABS } ?: "score"
         setContentView(layout())
-        render()
+        setTab(tab)
+        tours.load { rerender(); scoreboard.render() }
+        tick()
+    }
+
+    override fun onSaveInstanceState(out: Bundle) {
+        super.onSaveInstanceState(out)
+        out.putString(TAB_KEY, tab)
+    }
+
+    // Lo que quedó sin escribir se escribe antes de que el sistema congele la app.
+    override fun onPause() {
+        tours.flush()
+        super.onPause()
     }
 
     override fun onDestroy() {
-        scope.cancel()
+        main.removeCallbacksAndMessages(null)
+        scoreboard.dispose()
         super.onDestroy()
+    }
+
+    @Deprecated("Activity without AndroidX: the back button still comes here")
+    override fun onBackPressed() {
+        if (tab != "score") return setTab("score")
+        @Suppress("DEPRECATION") super.onBackPressed()
     }
 
     // ---------- pantalla ----------
@@ -66,9 +114,13 @@ class MainActivity : Activity() {
         setBackgroundColor(col(R.color.padel_bg))
         fitsSystemWindows = true
         addView(topbar())
-        addView(optionsBar())
-        addView(board(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        addView(controls())
+        addView(tabs())
+        tabPage = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(px(16), px(16), px(16), px(16)) }
+        tabScroll = ScrollView(this@MainActivity).apply { addView(tabPage); isFillViewport = true }
+        addView(FrameLayout(this@MainActivity).apply {
+            addView(scoreboard.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(tabScroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
     }
 
     private fun topbar(): View {
@@ -80,356 +132,130 @@ class MainActivity : Activity() {
         return DotrinoTopbar(
             this,
             repo = "imdotrino/dotrino-padel-contador",
-            brand = DotrinoTopbar.Brand(getString(R.string.app_name), R.drawable.padel_brand),
-            actions = listOf(action(getString(R.string.results).uppercase(), "results-btn") { openResults() }),
+            brand = DotrinoTopbar.Brand("Padel", R.drawable.padel_brand),
+            actions = listOf(
+                action(t("rulesBtn").uppercase(), "rules-btn") { openRules(null) },
+                action(t("results").uppercase(), "results-btn") { scoreboard.openResults() },
+            ),
         ) { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://dotrino.com/"))) }.view
     }
 
-    /** Las opciones del partido, a la vista arriba del tablero; tocarlas las edita (PWA 0.4.0). */
-    private lateinit var optionsText: TextView
-
-    private fun optionsBar(): View = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER
-        setBackgroundColor(col(R.color.padel_surface))
-        setPadding(px(14), px(8), px(14), px(8))
-        tag = "options-btn"
-        contentDescription = getString(R.string.options_title)
-        setOnClickListener { openOptions() }
-        optionsText = label("", 13f, col(R.color.padel_text), bold = true).apply { isSingleLine = true; letterSpacing = 0.03f }
-        addView(optionsText)
-        addView(label("✎", 13f, col(R.color.padel_accent)).apply { setPadding(px(8), 0, 0, 0) })
-    }
-
-    private fun optionsSummary() = getString(when (config.scoring) {
-        Scoring.advantage -> R.string.advantage
-        Scoring.star -> R.string.double_adv
-        Scoring.golden -> R.string.golden
-    }) + " · " + getString(when (config.sets) { 1 -> R.string.sets_label1; 3 -> R.string.sets_label3; else -> R.string.sets_label5 })
-
-    /** Lo de un lado del tablero, para repintarlo. */
-    private class Panel(
-        val name: EditText,
-        val sets: MetaRow,
-        val games: MetaRow,
-        val points: TextView,
-        val pointMinus: TextView,
-        val pointPlus: TextView,
-        val serve: TextView,
-        val tie: TextView,
-    )
-
-    private class MetaRow(val root: View, val minus: TextView, val value: TextView, val total: TextView, val plus: TextView)
-
-    private fun board(): View {
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val built = mutableMapOf<Side, Panel>()
-        for (side in Side.entries) {
-            val (view, panel) = panel(side)
-            built[side] = panel
-            row.addView(view, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
-        }
-        panels = built
-        court = CourtView(this)
-        return FrameLayout(this).apply {
-            addView(row, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-            addView(court, FrameLayout.LayoutParams(px(150), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = px(40) })
-        }
-    }
-
-    private fun circle(text: String, big: Boolean, onClick: () -> Unit) = TextView(this).apply {
-        this.text = text
-        gravity = Gravity.CENTER
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, if (big) 26f else 18f)
-        setTypeface(typeface, Typeface.BOLD)
-        setTextColor(col(R.color.padel_text))
-        background = rounded(0x33FFFFFF, px(100), px(1), 0x55FFFFFF)
-        setOnClickListener { onClick() }
-    }
-
-    private fun meta(side: Side, kind: Match.Kind, big: Boolean): MetaRow {
-        val size = if (big) 44 else 36
-        val minus = circle("−", false) { adjust(side, kind, -1) }
-        val plus = circle("+", false) { adjust(side, kind, +1) }
-        val value = label("0", if (big) 28f else 20f, col(R.color.padel_text), bold = true)
-        val total = label("", 14f, 0xAAFFFFFF.toInt())
-        val text = label(getString(if (kind == Match.Kind.s) R.string.sets else R.string.games).uppercase(), if (big) 15f else 12f, col(R.color.padel_text), bold = true)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(0, px(3), 0, px(3))
-            addView(minus, LinearLayout.LayoutParams(px(size), px(size)))
-            addView(value, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(6) })
-            addView(total)
-            addView(text, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(4); marginEnd = px(6) })
-            addView(plus, LinearLayout.LayoutParams(px(size), px(size)))
-        }
-        return MetaRow(root, minus, value, total, plus)
-    }
-
-    private fun panel(side: Side): Pair<View, Panel> {
-        val name = EditText(this).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(col(R.color.padel_text))
-            setHintTextColor(0xCCFFFFFF.toInt())
-            gravity = Gravity.CENTER
-            background = null
-            isSingleLine = true
-            imeOptions = EditorInfo.IME_ACTION_DONE
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
-            filters = arrayOf(android.text.InputFilter.LengthFilter(32))
-            isFocusable = false
-            setOnClickListener { editName(this) }
-            setOnEditorActionListener { v, action, e ->
-                if (action == EditorInfo.IME_ACTION_DONE || e?.keyCode == KeyEvent.KEYCODE_ENTER) { finishName(v as EditText); true } else false
-            }
-            setOnFocusChangeListener { v, has -> if (!has) finishName(v as EditText) }
-        }
-        val pencil = label("✎", 16f, col(R.color.padel_text)).apply {
-            setPadding(px(8), px(4), px(8), px(4))
-            contentDescription = getString(R.string.edit_name)
-            setOnClickListener { editName(name) }
-        }
-        val nameRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            addView(name, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(pencil)
-        }
-        val sets = meta(side, Match.Kind.s, big = true)
-        val games = meta(side, Match.Kind.g, big = false)
-        val points = label("0", 96f, col(R.color.padel_text), bold = true).apply { gravity = Gravity.CENTER; includeFontPadding = false }
-        val pointMinus = circle("−", true) { adjustPoint(side, -1) }
-        val pointPlus = circle("+", true) { adjustPoint(side, +1) }
-        val adj = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            addView(pointMinus, LinearLayout.LayoutParams(px(56), px(56)).apply { marginEnd = px(22) })
-            addView(pointPlus, LinearLayout.LayoutParams(px(56), px(56)))
-        }
-        val serve = label("", 16f, col(R.color.padel_text), bold = true).apply { gravity = Gravity.CENTER; letterSpacing = 0.08f }
-        val tie = label("TIE-BREAK", 13f, col(R.color.padel_on_accent), bold = true).apply {
-            background = rounded(col(R.color.padel_win), px(6))
-            setPadding(px(8), px(3), px(8), px(3))
-        }
-        val column = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(px(6), px(16), px(6), px(8))
-            setBackgroundColor(col(if (side == Side.left) R.color.padel_left else R.color.padel_right))
-            tag = "team-$side"
-            addView(View(this@MainActivity), LinearLayout.LayoutParams(1, 0, 1f))
-            addView(nameRow)
-            addView(sets.root)
-            addView(games.root)
-            addView(points)
-            addView(adj)
-            addView(tie, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = px(8) })
-            addView(serve, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = px(10) })
-            addView(View(this@MainActivity), LinearLayout.LayoutParams(1, 0, 1.4f))
-            // Tocar el panel (fuera de los botones y del nombre) es ganar el punto.
-            setOnClickListener { play(side) }
-        }
-        return column to Panel(name, sets, games, points, pointMinus, pointPlus, serve, tie)
-    }
-
-    private fun controls(): View = LinearLayout(this).apply {
+    private fun tabs(): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         setBackgroundColor(col(R.color.padel_bg))
-        fun ctl(text: Int, accent: Boolean = false, run: () -> Unit) = label(getString(text).uppercase(), 16f,
-            col(if (accent) R.color.padel_on_accent else R.color.padel_muted), bold = true).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, px(18), 0, px(18))
-            if (accent) setBackgroundColor(col(R.color.padel_accent))
-            setOnClickListener { run() }
+        for (name in TABS) {
+            val b = label(t(TAB_LABELS.getValue(name)), 14f, col(R.color.padel_muted), bold = true).apply {
+                gravity = Gravity.CENTER
+                isSingleLine = true
+                setPadding(px(2), px(12), px(2), px(12))
+                tag = "tab-$name"
+                setOnClickListener { setTab(name) }
+            }
+            tabButtons[name] = b
+            addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        val lp = { LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f) }
-        addView(ctl(R.string.undo) { match.undo()?.let { update(it) } }, lp())
-        addView(ctl(R.string.serve_btn, accent = true) { update(match.switchServer()) }, lp())
-        addView(ctl(R.string.new_match) { newMatch() }, lp())
     }
 
-    // ---------- jugadas ----------
-
-    private fun update(next: Match) {
-        match = next
-        repo.saveMatch(match)
-        render()
-    }
-
-    private fun play(side: Side) = update(match.winPoint(config, side))
-    private fun adjust(side: Side, kind: Match.Kind, delta: Int) = match.adjust(config, side, kind, delta)?.let { update(it) }
-    private fun adjustPoint(side: Side, delta: Int) = match.adjustPoint(config, side, delta)?.let { update(it) }
-
-    private fun editName(input: EditText) {
-        input.isFocusableInTouchMode = true
-        input.isFocusable = true
-        input.requestFocus()
-        input.selectAll()
-        getSystemService(InputMethodManager::class.java).showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
-    }
-
-    private fun finishName(input: EditText) {
-        if (!input.isFocusable) return
-        input.isFocusable = false
-        getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(input.windowToken, 0)
-        val names = match.names.let {
-            if (input === panels.getValue(Side.left).name) it.copy(left = input.text.toString()) else it.copy(right = input.text.toString())
+    private fun setTab(name: String) {
+        check(name in TABS) { "unknown tab: $name" }
+        tab = name
+        for ((n, b) in tabButtons) {
+            val on = n == name
+            b.setTextColor(col(if (on) R.color.padel_text else R.color.padel_muted))
+            b.background = if (on) android.graphics.drawable.LayerDrawable(arrayOf(
+                android.graphics.drawable.ColorDrawable(col(R.color.padel_bg)),
+                android.graphics.drawable.ColorDrawable(col(R.color.padel_accent)),
+            )).apply { setLayerInset(1, 0, b.height.coerceAtLeast(px(44)) - px(3), 0, 0) } else null
+            b.isSelected = on
         }
-        match = match.copy(names = names)
-        repo.saveMatch(match)
+        scoreboard.view.visibility = if (name == "score") View.VISIBLE else View.GONE
+        tabScroll.visibility = if (name == "score") View.GONE else View.VISIBLE
+        if (name == "score") scoreboard.render() else renderTab()
     }
 
-    private fun newMatch() {
-        if (!match.hasProgress) return update(match.reset())
-        ask(getString(R.string.new_match_title), getString(R.string.confirm_new), getString(R.string.new_match_ok)) {
-            val r = Result.of(
-                UUID.randomUUID().toString(), System.currentTimeMillis(),
-                match.names.left.ifBlank { getString(R.string.team_a) },
-                match.names.right.ifBlank { getString(R.string.team_b) },
-                match.currentSets(),
-            )
-            scope.launch {
-                try {
-                    withContext(Dispatchers.IO) { repo.saveResult(r) }
-                } catch (e: Exception) {
-                    // Sin guardar no se reinicia: el marcador sigue ahí para no perder el partido.
-                    android.util.Log.e("padel", "could not save result", e)
-                    toast(getString(R.string.result_save_failed, e.message ?: e.toString()))
-                    return@launch
-                }
-                update(match.reset())
+    private fun renderTab() {
+        if (tab == "score") return
+        tabPage.removeAllViews()
+        when (tab) {
+            "setup" -> setupTab(c, tabPage)
+            "rules" -> rulesTab(c, tabPage, formHere = rulesModal == null)
+            "table" -> tableTab(c, tabPage)
+            "matches" -> matchesTab(c, tabPage, refs)
+        }
+    }
+
+    /** El modal de reglas, desde cualquier pestaña. Sin `rulesetId`, con las del torneo abierto. */
+    override fun openRules(rulesetId: String?) {
+        c.loadForm(rulesetId)
+        val (dialog, body) = sheet(t("rulesH"))
+        rulesModal = dialog to body
+        // Al cerrarse, el formulario vuelve a la pestaña Reglas.
+        dialog.setOnDismissListener { rulesModal = null; rerender() }
+        paintRulesModal()
+        dialog.show()
+        rerender()
+    }
+
+    private fun paintRulesModal() {
+        val (dialog, body) = rulesModal ?: return
+        body.removeAllViews()
+        body.addView(rulesForm(c) { dialog.dismiss() })
+    }
+
+    // ---------- TournamentController.Ui / Host ----------
+
+    override fun changed() = rerender()
+
+    override fun rerender() {
+        renderTab()
+        paintRulesModal()
+    }
+
+    override fun ask(title: String, text: String, ok: String, danger: Boolean, onYes: () -> Unit) =
+        (this as Activity).ask(title, text, ok, danger = danger, onYes = onYes)
+
+    override fun toast(message: String, error: Boolean) = (this as Activity).toast(message)
+
+    override fun goTab(tab: String) = setTab(tab)
+
+    override fun linkedMatchId() = scoreboard.linkedMatchId()
+
+    override fun playMatch(tour: Tournament, match: TMatch) = scoreboard.playLinked(tour, match) { ok -> if (ok) setTab("score") }
+
+    // ---------- el reloj ----------
+
+    /**
+     * Un solo reloj para los cronómetros: el de la ronda en Partidos y la cuenta atrás del
+     * partido en el marcador. Avisa UNA vez cuando uno llega a cero con la app abierta, y deja
+     * la pantalla encendida mientras corre (el aviso tiene que sonar).
+     */
+    private fun tick() {
+        val now = System.currentTimeMillis()
+        val tour = if (tours.status == "ready") tours.active() else null
+        var running = false
+        tour?.rounds?.forEachIndexed { i, r ->
+            if (r.clock == null) return@forEachIndexed
+            val st = Engine.clockOf(tour, r, now)
+            val before = seenClock[r.id]
+            seenClock[r.id] = st.state
+            if (st.state == "running") running = true
+            if (before == "running" && st.state == "done") {
+                ring()
+                toast(t("timeUp", "n" to i + 1), false)
             }
         }
+        if (tour != null && tab == "matches" && !tickClocks(tour, refs, now)) renderTab()
+        scoreboard.tick(now)
+        if (running) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        main.postDelayed({ tick() }, 500)
     }
 
-    // ---------- pintado ----------
-
-    private fun render() {
-        for (side in Side.entries) {
-            val p = panels.getValue(side)
-            val s = match.now[side]
-            val pt = match.point(side)
-            p.points.text = pt.text
-            p.points.setTextColor(col(if (pt.ad) R.color.padel_win else R.color.padel_text))
-            val showSets = match.showSets(config)
-            p.sets.root.visibility = if (showSets) View.VISIBLE else View.GONE
-            paintMeta(p.sets, s.s, if (config.sets == 1) 0 else config.sets)
-            paintMeta(p.games, s.g, 0)
-            p.pointMinus.isEnabled = match.canAdjustPoint(config, side, -1)
-            p.pointPlus.isEnabled = match.canAdjustPoint(config, side, +1)
-            p.pointMinus.alpha = if (p.pointMinus.isEnabled) 1f else 0.35f
-            p.pointPlus.alpha = if (p.pointPlus.isEnabled) 1f else 0.35f
-            p.serve.text = if (match.now.server == side) "● ${getString(R.string.serve)} ${match.player}" else ""
-            p.tie.visibility = if (match.now.tiebreak) View.VISIBLE else View.INVISIBLE
-            val name = if (side == Side.left) match.names.left else match.names.right
-            if (!p.name.isFocusable && p.name.text.toString() != name) p.name.setText(name)
-            p.name.hint = getString(if (side == Side.left) R.string.team_a else R.string.team_b).uppercase()
+    private fun ring() {
+        try {
+            ToneGenerator(AudioManager.STREAM_ALARM, 100).startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1500)
+        } catch (e: RuntimeException) {
+            android.util.Log.e("padel", "could not play the time-up tone", e)
         }
-        court.show(match.now.server, match.courtSide)
-        optionsText.text = optionsSummary()
-    }
-
-    private fun paintMeta(row: MetaRow, value: Int, total: Int) {
-        row.value.text = value.toString()
-        row.total.text = if (total > 0) "/$total" else ""
-        row.minus.isEnabled = value > 0
-        row.minus.alpha = if (value > 0) 1f else 0.35f
-    }
-
-    // ---------- opciones ----------
-
-    private fun openOptions() {
-        val (dialog, body) = sheet(getString(R.string.options_h))
-        fun paint() {
-            body.removeAllViews()
-            body.addView(label(getString(R.string.match_sets).uppercase(), 13f, col(R.color.padel_muted), bold = true).apply { setPadding(0, px(8), 0, px(8)) })
-            body.addView(segmented(Config.SETS.map { it to it.toString() }, config.sets) { n ->
-                config = config.copy(sets = n)
-                repo.saveConfig(config)
-                update(match.reconfigured(config))
-                paint()
-            })
-            body.addView(label(getString(when (config.sets) { 1 -> R.string.desc_sets1; 3 -> R.string.desc_sets3; else -> R.string.desc_sets5 }), 14f, col(R.color.padel_muted)).apply { setPadding(0, px(8), 0, px(18)) })
-            body.addView(label(getString(R.string.scoring_mode).uppercase(), 13f, col(R.color.padel_muted), bold = true).apply { setPadding(0, 0, 0, px(8)) })
-            body.addView(segmented(listOf(
-                Scoring.advantage to getString(R.string.advantage),
-                Scoring.star to getString(R.string.double_adv),
-                Scoring.golden to getString(R.string.golden),
-            ), config.scoring) { s ->
-                config = config.copy(scoring = s)
-                repo.saveConfig(config)
-                render()
-                paint()
-            })
-            body.addView(label(getString(when (config.scoring) {
-                Scoring.advantage -> R.string.desc_advantage
-                Scoring.star -> R.string.desc_star
-                Scoring.golden -> R.string.desc_golden
-            }), 14f, col(R.color.padel_muted)).apply { setPadding(0, px(8), 0, px(8)) })
-        }
-        paint()
-        dialog.show()
-    }
-
-    // ---------- resultados ----------
-
-    private fun openResults() {
-        val (dialog, body) = sheet(getString(R.string.results_h))
-        val fmt = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
-        fun paint() {
-            scope.launch {
-                val list = try {
-                    withContext(Dispatchers.IO) { repo.results() }
-                } catch (e: Exception) {
-                    android.util.Log.e("padel", "could not read results", e)
-                    body.removeAllViews()
-                    body.addView(label(getString(R.string.results_load_failed, e.message ?: e.toString()), 15f, col(R.color.padel_muted)))
-                    return@launch
-                }
-                body.removeAllViews()
-                if (list.isEmpty()) {
-                    body.addView(label(getString(R.string.no_results), 15f, col(R.color.padel_muted)).apply { setPadding(0, px(16), 0, px(16)) })
-                    return@launch
-                }
-                for (r in list.sortedByDescending { it.date }) body.addView(resultRow(r, fmt) { id ->
-                    scope.launch {
-                        try {
-                            withContext(Dispatchers.IO) { repo.deleteResult(id) }
-                        } catch (e: Exception) {
-                            android.util.Log.e("padel", "could not delete result", e)
-                            toast(getString(R.string.result_delete_failed, e.message ?: e.toString()))
-                            return@launch
-                        }
-                        paint()
-                    }
-                })
-            }
-        }
-        paint()
-        dialog.show()
-    }
-
-    private fun resultRow(r: Result, fmt: SimpleDateFormat, onDelete: (String) -> Unit): View {
-        val leftWins = r.setsLeft > r.setsRight
-        val rightWins = r.setsRight > r.setsLeft
-        val info = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(label(fmt.format(Date(r.date)), 12f, col(R.color.padel_muted)))
-            addView(label(
-                "${if (leftWins) "🏆 " else ""}${r.left} ${r.setsLeft} — ${r.setsRight} ${r.right}${if (rightWins) " 🏆" else ""}",
-                16f, col(R.color.padel_text), bold = true,
-            ))
-            addView(label(r.sets.joinToString("  ") { "${it.left}-${it.right}" }, 13f, col(R.color.padel_muted)))
-        }
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, px(10), 0, px(10))
-            tag = "result-${r.id}"
-            addView(info, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(button(getString(R.string.delete), danger = true) { onDelete(r.id) })
-        }
+        getSystemService(Vibrator::class.java)?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 400, 200, 400, 200, 400), -1))
     }
 }

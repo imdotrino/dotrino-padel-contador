@@ -67,7 +67,7 @@ fun Activity.sheet(title: String): Pair<Dialog, LinearLayout> {
         addView(TextView(this@sheet).apply {
             text = "✕"; setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f); setTextColor(col(R.color.padel_text))
             setPadding(px(12), px(4), px(12), px(4))
-            contentDescription = getString(R.string.close)
+            contentDescription = t("close")
             setOnClickListener { dialog.dismiss() }
         })
     }
@@ -92,7 +92,7 @@ fun Activity.sheet(title: String): Pair<Dialog, LinearLayout> {
 }
 
 /** Confirmación propia (título, texto, aceptar/cancelar). */
-fun Activity.ask(title: String, text: String, ok: String, danger: Boolean = false, onYes: () -> Unit) {
+fun Activity.ask(title: String, text: String, ok: String, danger: Boolean = false, cancel: String = t("cancel"), onYes: () -> Unit) {
     val dialog = Dialog(this).apply { requestWindowFeature(Window.FEATURE_NO_TITLE) }
     val box = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
@@ -104,8 +104,8 @@ fun Activity.ask(title: String, text: String, ok: String, danger: Boolean = fals
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END
             setPadding(0, px(12), 0, 0)
-            addView(button(getString(R.string.cancel)) { dialog.dismiss() })
-            addView(button(ok, filled = !danger, danger = danger) { dialog.dismiss(); onYes() },
+            addView(button(cancel) { dialog.dismiss() }.apply { tag = "dialog-cancel" })
+            addView(button(ok, filled = !danger, danger = danger) { dialog.dismiss(); onYes() }.apply { tag = "dialog-ok" },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(8) })
         })
     }
