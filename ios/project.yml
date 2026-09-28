@@ -59,7 +59,11 @@ targets:
   PadelTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [PadelTests]
+    sources:
+      - PadelTests
+      # Los casos de oro del motor, sacados de la PWA (test/vectors/gen.mjs); los mismos que Android.
+      - path: ../test/vectors/engine.json
+        buildPhase: resources
     dependencies:
       - target: Padel
     settings:

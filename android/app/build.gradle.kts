@@ -26,6 +26,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    // Los casos de oro del motor del torneo, sacados de la PWA (test/vectors/gen.mjs): los
+    // mismos que prueba iOS.
+    sourceSets["test"].resources.srcDir("../../test/vectors")
 }
 
 dependencies {
