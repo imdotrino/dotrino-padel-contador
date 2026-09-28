@@ -22,7 +22,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.dotrino.padel.tournament.ClockState
 import com.dotrino.padel.tournament.LiveShare
-import com.dotrino.sdk.IdentityClient
+import com.dotrino.sdk.ui.IdentityRequired
 import com.dotrino.padel.tournament.Engine
 import com.dotrino.padel.tournament.Host
 import com.dotrino.padel.tournament.MatchesRefs
@@ -222,7 +222,12 @@ class MainActivity : Activity(), TournamentController.Ui, Host {
     override fun isSharing(tour: Tournament) = live.isSharing(tour)
     override fun viewers(tour: Tournament) = live.viewersOf(tour)
 
-    override fun shareLive(tour: Tournament) = live.share(tour) { r ->
+    override fun shareLive(tour: Tournament) {
+        if (!IdentityRequired.check(this)) return
+        doShareLive(tour)
+    }
+
+    private fun doShareLive(tour: Tournament) = live.share(tour) { r ->
         r.onSuccess { link ->
             // La clave del enlace se guarda con el torneo: así sobrevive a cerrar la app.
             tours.save(tour)
@@ -240,12 +245,9 @@ class MainActivity : Activity(), TournamentController.Ui, Host {
         }
     }
 
-    /** Sin la app de identidad no hay perfil con el que emitir: se dice y se ofrece instalarla. */
+    /** Sin la app de identidad no hay perfil con el que emitir: el modal compartido lo explica y lleva a Play. */
     private fun showLiveError(reason: String) {
-        if (reason != "no-identity-app") return toast(reason, error = true)
-        (this as Activity).ask(t("liveShare"), t("liveNeedsIdentityApp"), t("liveInstallIdentity")) {
-            startActivity(Intent(Intent.ACTION_VIEW, IdentityClient.installUri))
-        }
+        if (reason == "no-identity-app") IdentityRequired.show(this) else toast(reason, error = true)
     }
 
     override fun rerender() {
