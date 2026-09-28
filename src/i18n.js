@@ -30,7 +30,7 @@ const DICT = {
     onTime: 'on time', timeUpSaved: 'Time is up. Saved to the tournament: {result}',
     wakeLockFailed: 'The screen may turn off, and then the time-up alert will not sound. Keep the app in view.',
 
-    tabsAria: 'Sections', tabScore: 'Score', tabMatches: 'Matches', tabTable: 'Table', tabSetup: 'Tournament',
+    tabsAria: 'Sections', tabScore: 'Score', tabMatches: 'Matches', tabTable: 'Table', tabSetup: 'Tournament', tabRules: 'Rules',
 
     storeLoading: 'Opening your storage…', storeFailed: 'Could not open your storage: {reason}',
     storeNotReady: 'Your storage is not ready yet. Try again in a moment.', retry: 'Try again',
@@ -152,7 +152,7 @@ const DICT = {
     onTime: 'por tiempo', timeUpSaved: 'Se acabó el tiempo. Guardado en el torneo: {result}',
     wakeLockFailed: 'La pantalla puede apagarse y entonces el aviso de fin de tiempo no sonará. Mantén la app a la vista.',
 
-    tabsAria: 'Secciones', tabScore: 'Marcador', tabMatches: 'Partidos', tabTable: 'Tabla', tabSetup: 'Torneo',
+    tabsAria: 'Secciones', tabScore: 'Marcador', tabMatches: 'Partidos', tabTable: 'Tabla', tabSetup: 'Torneo', tabRules: 'Reglas',
 
     storeLoading: 'Abriendo tu almacén…', storeFailed: 'No se pudo abrir tu almacén: {reason}',
     storeNotReady: 'Tu almacén todavía no está listo. Inténtalo de nuevo en un momento.', retry: 'Reintentar',

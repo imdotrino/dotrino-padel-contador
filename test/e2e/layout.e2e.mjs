@@ -110,7 +110,7 @@ const tournamentLayout = page => page.evaluate(() => {
 })
 
 async function checkTabs (page, wide) {
-  for (const tab of ['matches', 'table', 'setup']) {
+  for (const tab of ['matches', 'table', 'setup', 'rules']) {
     await page.click(`[data-testid="tab-${tab}"]`)
     const l = await tournamentLayout(page)
     assert.equal(l.overflowX, false, `${tab}: horizontal overflow`)

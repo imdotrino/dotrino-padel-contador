@@ -42,7 +42,7 @@ const viewer = Boolean(watchRef) || watchBad
 
 // ---------- pestañas ----------
 
-const TABS = ['score', 'matches', 'table', 'setup']
+const TABS = ['score', 'matches', 'table', 'setup', 'rules']
 // La pestaña sobrevive a un refresco, pero abrir la app de cero vuelve al marcador (§4).
 const TAB_KEY = 'padel.tab'
 
@@ -131,7 +131,7 @@ tournament.initTournamentViews({
 if (viewer) {
   const watching = { state: null, status: watchBad ? 'bad-link' : 'connecting', reason: null }
   tournament.setWatching(watching)
-  for (const tab of ['score', 'setup']) $('tab-' + tab).disabled = true
+  for (const tab of ['score', 'setup', 'rules']) $('tab-' + tab).disabled = true
   $('btnRules').disabled = true
   setTab('matches')
   if (watchRef) {
