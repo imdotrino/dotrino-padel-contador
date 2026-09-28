@@ -43,12 +43,21 @@ Padel tiene tres versiones en este repo (CONVENCIONES §16): la PWA en la raíz,
 | | Versión | Qué tiene |
 |---|---|---|
 | PWA | 0.4.0 | marcador, torneos, reglas, compartir en vivo |
-| Android | 0.1.0 | el marcador (partido suelto, resultados, opciones) |
-| iOS | — | en preparación |
+| Android | 0.1.0 | marcador, torneos y reglas; **sin compartir en vivo** |
+| iOS | 0.1.0 | marcador, torneos y reglas; **sin compartir en vivo** |
+
+La versión nativa se queda en 0.1.0 hasta que tenga todo lo de la PWA: la regla (§16.3) es
+que el número diga con qué PWA está a la par, y sin el vivo no lo está con ninguna.
+
+El motor del torneo es el mismo en las tres: `test/vectors/gen.mjs` saca casos de oro del JS
+y Android e iOS los repiten (`EngineVectorsTest`); los textos salen de `src/i18n.js`
+(`scripts/native-i18n.mjs`). `npm test` avisa si alguno de los dos se queda viejo.
 
 La librería del ecosistema (`dotrino-native`: almacén, idioma, barra) es el submódulo
 `native/`. Después de clonar: `git submodule update --init`.
 
 ```sh
 cd android && ./gradlew :app:testDebugUnitTest :app:assembleDebug   # APK de prueba
+cd ios && xcodegen generate && xcodebuild -project Padel.xcodeproj -scheme Padel \
+  -destination 'platform=iOS Simulator,name=iPhone 16' test          # en una Mac
 ```
