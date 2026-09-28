@@ -43,11 +43,16 @@ Padel tiene tres versiones en este repo (CONVENCIONES §16): la PWA en la raíz,
 | | Versión | Qué tiene |
 |---|---|---|
 | PWA | 0.4.0 | marcador, torneos, reglas, compartir en vivo |
-| Android | 0.1.0 | marcador, torneos y reglas; **sin compartir en vivo** |
-| iOS | 0.1.0 | marcador, torneos y reglas; **sin compartir en vivo** |
+| Android | 0.1.0 | marcador, torneos, reglas y compartir en vivo |
+| iOS | 0.1.0 | marcador, torneos, reglas y compartir en vivo |
 
-La versión nativa se queda en 0.1.0 hasta que tenga todo lo de la PWA: la regla (§16.3) es
-que el número diga con qué PWA está a la par, y sin el vivo no lo está con ninguna.
+Lo que todavía no tienen de la PWA: el **botón de perfil** en la barra (§6.1) y **mirar** un
+torneo dentro de la app (un enlace `#watch=` se abre en el navegador, en la PWA). Por eso el
+número sigue en 0.1.0: la regla (§16.3) es que diga con qué PWA están a la par.
+
+Compartir en vivo firma con **el perfil del teléfono** (la identidad de Dotrino: en Android,
+la app de identidad `com.dotrino.identity`; en iOS, el almacén compartido del equipo) y obedece
+su acta. Sin perfil, la app lo dice y no emite.
 
 El motor del torneo es el mismo en las tres: `test/vectors/gen.mjs` saca casos de oro del JS
 y Android e iOS los repiten (`EngineVectorsTest`); los textos salen de `src/i18n.js`
