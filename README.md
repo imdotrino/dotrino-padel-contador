@@ -42,7 +42,7 @@ Padel tiene tres versiones en este repo (CONVENCIONES §16): la PWA en la raíz,
 
 | | Versión | Qué tiene |
 |---|---|---|
-| PWA | 0.3.0 | marcador, torneos, reglas, compartir en vivo |
+| PWA | 0.4.0 | marcador, torneos, reglas, compartir en vivo |
 | Android | 0.1.0 | el marcador (partido suelto, resultados, opciones) |
 | iOS | — | en preparación |
 

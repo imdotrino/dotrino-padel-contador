@@ -177,6 +177,17 @@ dotrino-topbar {
 .seg-btn[disabled] { opacity: .5; cursor: default; transform: none; }
 
 /* --- Marcador --- */
+/* Las opciones del partido, a la vista; tocarlas abre su edición. */
+.match-options {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 8px 14px; border: none; border-bottom: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 13px; font-weight: 800;
+  letter-spacing: .03em; cursor: pointer;
+}
+.match-options:active { background: var(--surface-2); }
+.match-options-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.match-options-edit { color: var(--accent); }
+@media (max-height: 500px) { .match-options { padding: 3px 14px; font-size: 12px; } }
 .linked-bar {
   display: flex;
   align-items: center;
@@ -837,7 +848,8 @@ label.label { margin-bottom: 8px; }
 /* Móvil girado: el panel no llega a 250 px de alto. Los +/− bajan del mínimo táctil
    de 44 px, o el marcador no cabe entero. */
 @media (min-aspect-ratio: 5/4) and (max-height: 500px) {
-  .points { font-size: min(17vw, 20vh); }
+  /* 17vh y no 20vh: la barra de las opciones del partido también ocupa su alto. */
+  .points { font-size: min(17vw, 17vh); }
   .adj { width: 32px; height: 32px; min-width: 32px; min-height: 32px; font-size: 16px; }
   .adj-points { width: 36px; height: 36px; min-width: 36px; min-height: 36px; font-size: 20px; }
 }

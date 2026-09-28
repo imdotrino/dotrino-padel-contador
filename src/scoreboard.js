@@ -254,7 +254,12 @@ function renderOptions () {
   for (const b of document.querySelectorAll('#setsGroup .seg-btn')) b.classList.toggle('on', Number(b.dataset.sets) === config.sets)
   $('scoringDesc').innerHTML = t('desc_' + config.scoring)
   $('setsDesc').innerHTML = t('desc_sets' + config.sets)
+  // Las opciones del partido, a la vista arriba del marcador; tocarlas las edita.
+  // Jugando un partido del torneo, los sets los decide el torneo: solo se ve la puntuación.
+  $('matchOptionsText').textContent = t(SCORING_LABEL[config.scoring]) + (state.link ? '' : ` · ${t('setsLabel' + config.sets)}`)
 }
+
+const SCORING_LABEL = { advantage: 'advantage', star: 'doubleAdv', golden: 'golden' }
 
 function renderLink () {
   const l = state.link
