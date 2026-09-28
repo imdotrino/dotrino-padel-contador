@@ -21,6 +21,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.dotrino.padel.tournament.ClockState
+import com.dotrino.padel.tournament.LiveShare
+import com.dotrino.sdk.IdentityClient
 import com.dotrino.padel.tournament.Engine
 import com.dotrino.padel.tournament.Host
 import com.dotrino.padel.tournament.MatchesRefs
@@ -60,6 +62,7 @@ class MainActivity : Activity(), TournamentController.Ui, Host {
     private var rulesModal: Pair<Dialog, LinearLayout>? = null
     private val main = Handler(Looper.getMainLooper())
     private val seenClock = mutableMapOf<String, String>()
+    private lateinit var live: LiveShare
 
     override fun attachBaseContext(base: Context) = super.attachBaseContext(DotrinoLocale.wrap(base))
 
@@ -70,6 +73,9 @@ class MainActivity : Activity(), TournamentController.Ui, Host {
         tours = TournamentRepo(this)
         c = TournamentController(tours, this)
         tours.onError = { e -> toast(t("saveFailed", "reason" to (e.message ?: e.toString())), error = true) }
+        // Compartir en vivo: cada cambio del torneo compartido sale para los que miran.
+        live = LiveShare(this, onChange = { if (tab == "matches") renderTab() }, onError = { showLiveError(it) })
+        tours.onSaved = { live.publishSoon(it) }
         scoreboard = Scoreboard(this, repo, object : Scoreboard.Hooks {
             override fun saveLinked(link: Match.Link, games: Pair<Int, Int>, sets: Pair<Int, Int>?) =
                 c.saveLinkedResult(link.tournamentId, link.matchId, games, sets)
@@ -80,7 +86,7 @@ class MainActivity : Activity(), TournamentController.Ui, Host {
         tab = savedInstanceState?.getString(TAB_KEY)?.takeIf { it in TABS } ?: "score"
         setContentView(layout())
         setTab(tab)
-        tours.load { rerender(); scoreboard.render() }
+        tours.load { rerender(); scoreboard.render(); live.resume(tours.active()) }
         tick()
     }
 
@@ -96,6 +102,7 @@ class MainActivity : Activity(), TournamentController.Ui, Host {
     }
 
     override fun onDestroy() {
+        live.close()
         main.removeCallbacksAndMessages(null)
         scoreboard.dispose()
         super.onDestroy()
@@ -204,7 +211,42 @@ class MainActivity : Activity(), TournamentController.Ui, Host {
 
     // ---------- TournamentController.Ui / Host ----------
 
-    override fun changed() = rerender()
+    override fun changed() {
+        rerender()
+        // Al abrir otro torneo que se compartía, se vuelve a emitir con su mismo enlace.
+        if (tours.status == "ready") live.resume(tours.active())
+    }
+
+    // ---------- en vivo ----------
+
+    override fun isSharing(tour: Tournament) = live.isSharing(tour)
+    override fun viewers(tour: Tournament) = live.viewersOf(tour)
+
+    override fun shareLive(tour: Tournament) = live.share(tour) { r ->
+        r.onSuccess { link ->
+            // La clave del enlace se guarda con el torneo: así sobrevive a cerrar la app.
+            tours.save(tour)
+            renderTab()
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+                .putExtra(Intent.EXTRA_SUBJECT, t("liveShareHeading"))
+                .putExtra(Intent.EXTRA_TEXT, t("liveShareText", "name" to tour.name) + "\n" + link), t("liveShareHeading")))
+        }.onFailure { showLiveError(live.reasonOf(it)) }
+    }
+
+    override fun stopLive(tour: Tournament) {
+        ask(t("liveStopTitle"), t("liveStopText"), t("liveStop"), danger = true) {
+            live.stop(tour)
+            tours.save(tour)
+        }
+    }
+
+    /** Sin la app de identidad no hay perfil con el que emitir: se dice y se ofrece instalarla. */
+    private fun showLiveError(reason: String) {
+        if (reason != "no-identity-app") return toast(reason, error = true)
+        (this as Activity).ask(t("liveShare"), t("liveNeedsIdentityApp"), t("liveInstallIdentity")) {
+            startActivity(Intent(Intent.ACTION_VIEW, IdentityClient.installUri))
+        }
+    }
 
     override fun rerender() {
         renderTab()

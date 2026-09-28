@@ -44,6 +44,9 @@ class TournamentRepo(context: Context) {
     var rulesets = listOf<Ruleset>()
         private set
 
+    /** Quien tenga que enterarse de cada cambio de un torneo (compartir en vivo). */
+    var onSaved: (Tournament) -> Unit = {}
+
     /** Quien tenga que enterarse de un fallo al guardar (la pantalla lo enseña). */
     var onError: (Throwable) -> Unit = { throw it }
 
@@ -91,6 +94,7 @@ class TournamentRepo(context: Context) {
         pending[t.id] = t
         main.removeCallbacks(flushRunnable)
         main.postDelayed(flushRunnable, SAVE_DELAY)
+        onSaved(t)
     }
 
     /** Lo que quedó sin escribir, ya (al ir la app a segundo plano). */

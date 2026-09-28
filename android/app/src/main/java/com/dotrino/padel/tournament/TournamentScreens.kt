@@ -261,6 +261,10 @@ interface Host {
     fun linkedMatchId(): String?
     fun goTab(tab: String)
     fun rerender()
+    fun isSharing(tour: Tournament): Boolean
+    fun viewers(tour: Tournament): Int
+    fun shareLive(tour: Tournament)
+    fun stopLive(tour: Tournament)
 }
 
 // ---------- Reglas ----------
@@ -339,6 +343,7 @@ fun Activity.matchesTab(c: TournamentController, into: LinearLayout, refs: Match
     refs.clocks.clear()
     if (storeGate(c, into)) return
     val tour = c.repo.active() ?: return emptyState(c, into)
+    into.addView(liveBar(tour))
     into.addView(heading(tour.name))
     refs.progress = label("", 13f, col(R.color.padel_muted)).apply { tag = "progress" }
     into.addView(refs.progress)
@@ -347,6 +352,27 @@ fun Activity.matchesTab(c: TournamentController, into: LinearLayout, refs: Match
     refs.next = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, px(16), 0, px(24)) }
     into.addView(refs.next)
     paintNext(c, tour, refs)
+}
+
+/** Compartir en vivo: los dos botones están siempre; «Dejar de compartir», deshabilitado si no se comparte. */
+private fun Activity.liveBar(tour: Tournament): View {
+    val h = this as Host
+    val on = h.isSharing(tour)
+    val n = h.viewers(tour)
+    return LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(px(12), px(8), px(8), px(8))
+        background = rounded(col(R.color.padel_surface), px(12), px(1), if (on) col(R.color.padel_accent) else col(R.color.padel_border))
+        tag = "live-bar"
+        addView(label(if (on) t(if (n == 1) "liveOn_one" else "liveOn", "n" to n) else t("liveOff"), 13f, col(R.color.padel_text), bold = true).apply { tag = "live-state" },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(button(t("liveShare")) { h.shareLive(tour) }.apply { tag = "live-share"; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f) })
+        addView(button(t("liveStop")) { h.stopLive(tour) }.apply {
+            isEnabled = on; alpha = if (on) 1f else 0.4f; tag = "live-stop"; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(6) })
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = px(12) }
+    }
 }
 
 private fun paintProgress(tour: Tournament, refs: MatchesRefs) {

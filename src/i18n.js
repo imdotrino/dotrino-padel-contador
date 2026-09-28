@@ -115,6 +115,10 @@ export const DICT = {
     liveStopTitle: 'Stop sharing?', liveStopText: 'The link stops working. Sharing again creates a new link.',
     liveShareHeading: 'Watch the tournament live', liveShareText: 'Follow “{name}” live',
     liveFailed: 'Could not share the tournament: {reason}',
+    // Solo en las apps nativas: lo que les falta para emitir como tu perfil.
+    liveNeedsIdentityApp: 'To share live, this phone needs the Dotrino identity app.', liveInstallIdentity: 'Install',
+    liveNeedsProfile: 'To share live, create your profile in the Dotrino app first.',
+    liveNeedsSigner: 'This device does not sign for your profile: give it permission from your vault to share live.',
     watchConnecting: 'Connecting to the tournament…', watchLive: 'Read only · live',
     watchWaiting: 'Waiting for the organizer. You see the last update that arrived.',
     watchWaitingEmpty: 'Waiting for the organizer to open the tournament.',
@@ -238,6 +242,10 @@ export const DICT = {
     liveStopTitle: '¿Dejar de compartir?', liveStopText: 'El enlace deja de funcionar. Si vuelves a compartir, sale un enlace nuevo.',
     liveShareHeading: 'Mirar el torneo en vivo', liveShareText: 'Sigue «{name}» en vivo',
     liveFailed: 'No se pudo compartir el torneo: {reason}',
+    // Solo en las apps nativas: lo que les falta para emitir como tu perfil.
+    liveNeedsIdentityApp: 'Para compartir en vivo, este teléfono necesita la app de identidad de Dotrino.', liveInstallIdentity: 'Instalar',
+    liveNeedsProfile: 'Para compartir en vivo, primero crea tu perfil en la app Dotrino.',
+    liveNeedsSigner: 'Este aparato no firma por tu perfil: dale permiso desde tu bóveda para compartir en vivo.',
     watchConnecting: 'Conectando con el torneo…', watchLive: 'Solo lectura · en vivo',
     watchWaiting: 'Esperando al organizador. Ves lo último que llegó.',
     watchWaitingEmpty: 'Esperando a que el organizador abra el torneo.',

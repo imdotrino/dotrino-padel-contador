@@ -7,6 +7,7 @@ import UIKit
 struct AppView: View {
     @StateObject private var tours: TournamentModel
     @StateObject private var score: ScoreboardModel
+    @StateObject private var live = LiveShare()
     @ObservedObject private var lang = DotrinoLang.shared
     @State private var sheet: Sheet?
     @Environment(\.scenePhase) private var phase
@@ -35,7 +36,14 @@ struct AppView: View {
         }
         .background(Palette.bg.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .onAppear { if tours.status == "idle" { tours.load() } }
+        .onAppear {
+            // Compartir en vivo: cada cambio del torneo compartido sale para los que miran.
+            tours.onSaved = { [live] in live.publishSoon($0) }
+            live.onError = { [tours] in tours.toast = $0 }
+            if tours.status == "idle" { tours.load() }
+        }
+        // Al abrir la app o cambiar de torneo, si se compartía se vuelve a emitir con su enlace.
+        .onChange(of: tours.status) { if $0 == "ready" { live.resume(tours.active()) } }
         // Lo que quedó sin escribir se escribe antes de que el sistema congele la app.
         .onChange(of: phase) { if $0 != .active { tours.flush() } }
         .sheet(item: $sheet, onDismiss: { tours.changed() }) { s in
@@ -99,7 +107,7 @@ struct AppView: View {
                         case "setup": SetupTab(tours: tours, openRules: openRules)
                         case "rules": RulesTab(tours: tours, formHere: sheet != .rules)
                         case "table": TableTab(tours: tours)
-                        default: MatchesTab(tours: tours, score: score, now: now)
+                        default: MatchesTab(tours: tours, score: score, live: live, now: now)
                         }
                     }
                     .padding(16)

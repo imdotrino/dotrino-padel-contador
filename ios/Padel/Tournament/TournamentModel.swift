@@ -29,6 +29,8 @@ final class TournamentModel: ObservableObject {
     @Published var toast: String?
     @Published var question: Question?
     @Published var tab = "score"
+    /// Quien tenga que enterarse de cada cambio de un torneo (compartir en vivo).
+    var onSaved: (Tournament) -> Void = { _ in }
 
     struct Question: Identifiable {
         let id = UUID()
@@ -110,6 +112,7 @@ final class TournamentModel: ObservableObject {
         let task = DispatchWorkItem { [weak self] in self?.flush() }
         flushTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: task)
+        onSaved(tour)
     }
 
     /// Lo que quedó sin escribir, ya (al ir la app a segundo plano).

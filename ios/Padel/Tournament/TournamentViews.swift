@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // Las pestañas del torneo (Torneo, Reglas, Tabla y Partidos): el puerto de las páginas de
 // src/tournament/view.js en SwiftUI. Leen y cambian `TournamentModel`.
@@ -582,12 +583,59 @@ struct TableTab: View {
 struct MatchesTab: View {
     @ObservedObject var tours: TournamentModel
     @ObservedObject var score: ScoreboardModel
+    @ObservedObject var live: LiveShare
     let now: Int64
+    @State private var shareLink: ShareItem?
+    @State private var sharing = false
+
+    struct ShareItem: Identifiable { let id = UUID(); let url: URL; let text: String }
+
+    /// Compartir en vivo: los dos botones están siempre; «Dejar de compartir», deshabilitado si no se comparte.
+    private func liveBar(_ tour: Tournament) -> some View {
+        let on = live.isSharing(tour)
+        let n = live.viewers[tour.id] ?? 0
+        return HStack(spacing: 6) {
+            Text(on ? t(n == 1 ? "liveOn_one" : "liveOn", ["n": n]) : t("liveOff"))
+                .font(.footnote.weight(.bold)).foregroundColor(Palette.text)
+                .accessibilityIdentifier("live-state")
+            Spacer()
+            AppButton(title: t("liveShare"), enabled: !sharing) {
+                sharing = true
+                Task {
+                    defer { sharing = false }
+                    do {
+                        let link = try await live.share(tour)
+                        // La clave del enlace se guarda con el torneo: así sobrevive a cerrar la app.
+                        tours.save(tour)
+                        tours.changed()
+                        if let u = URL(string: link) { shareLink = ShareItem(url: u, text: t("liveShareText", ["name": tour.name])) }
+                    } catch {
+                        tours.toast = live.reason(error)
+                    }
+                }
+            }
+            .accessibilityIdentifier("live-share")
+            AppButton(title: t("liveStop"), enabled: on) {
+                tours.ask(t("liveStopTitle"), t("liveStopText"), t("liveStop"), danger: true) {
+                    live.stop(tour)
+                    tours.save(tour)
+                    tours.changed()
+                }
+            }
+            .accessibilityIdentifier("live-stop")
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Palette.surface).clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(on ? Palette.accent : Palette.border))
+        .sheet(item: $shareLink) { item in ShareSheet(items: [item.text, item.url]) }
+    }
 
     var body: some View {
         StoreGate(tours: tours) {
             if let tour = tours.active() {
                 VStack(alignment: .leading, spacing: 8) {
+                    // Si este torneo se compartía (abierto desde «Mis torneos»), vuelve a emitirse.
+                    liveBar(tour).onAppear { live.resume(tour) }
                     Text(tour.name).font(.title2.weight(.bold)).foregroundColor(Palette.text)
                     let st = Engine.status(tour)
                     let est = Engine.estimate(tour)
@@ -746,4 +794,11 @@ private struct ScoreField: View {
                 if mine != current { tours.setScore(tour, match.id, kind, a, b) }
             }
     }
+}
+
+/// El menú de compartir del sistema (el enlace para mirar va por `#fragment`: no llega a ningún servidor).
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: items, applicationActivities: nil) }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
