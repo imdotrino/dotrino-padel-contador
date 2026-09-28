@@ -68,10 +68,21 @@ targets:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Padel.app/Padel"
         BUNDLE_LOADER: "$(TEST_HOST)"
 
+  PadelUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [PadelUITests]
+    dependencies:
+      - target: Padel
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Padel
+
 schemes:
   Padel:
     build:
       targets:
         Padel: all
     test:
-      targets: [PadelTests]
+      targets: [PadelTests, PadelUITests]
