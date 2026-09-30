@@ -7,12 +7,19 @@
 // Sin repliegue a localStorage: si el store no abre, se dice. Guardar en otro sitio
 // en silencio haría que los torneos «desaparecieran» al volver la conexión.
 import { Store } from '@dotrino/store'
+import { getIdentity } from './services/identity.js'
 
 let connecting = null
 
 export function openStore () {
   if (!connecting) {
-    connecting = Store.connect().catch(e => {
+    // Atado al PERFIL (respaldo en la bóveda, sin mezclar cuentas). Hasta 2026-09-30 conectaba
+    // sin identidad y todo quedaba en el espacio común del navegador; `adoptCommon` lo trae al
+    // perfil una vez, sin borrar el original.
+    connecting = getIdentity().then(identity => {
+      if (!identity) throw Object.assign(new Error('identity not available'), { code: 'no-identity' })
+      return Store.connect({ identity, adoptCommon: ['padel.'] })
+    }).catch(e => {
       connecting = null // el siguiente intento vuelve a probar
       throw e
     })

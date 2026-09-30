@@ -207,6 +207,8 @@ for (const id of ['modalResults', 'modalOptions', 'modalRules', 'modalDialog']) 
 getIdentity().then(async id => {
   if (!id) return
   topbar.identity = id
+  // El estado del respaldo en la bóveda, en el botón de perfil (topbar ≥ 0.13).
+  import('./storage.js').then(m => m.openStore()).then(s => { topbar.store = s }).catch(() => {})
   topbar.reputation = await getReputation()
 })
 
