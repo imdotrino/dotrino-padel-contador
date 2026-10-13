@@ -33,6 +33,7 @@
     "@dotrino/store": "0.12.3"
   },
   "devDependencies": {
+    "@dotrino/prerender": "0.1.0",
     "playwright": "1.62.0",
     "vite": "7.3.6"
   }
