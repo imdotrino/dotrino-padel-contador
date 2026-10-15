@@ -1,3 +1,4 @@
+import '@dotrino/theme/theme.css'
 import './style.css'
 // Barra superior estándar (§5): marca + volver + idioma + perfil + moneda. Va antes de
 // leer el idioma: al registrarse lo resuelve y lo deja en <html lang>.

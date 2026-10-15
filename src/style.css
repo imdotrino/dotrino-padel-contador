@@ -1,13 +1,15 @@
 :root {
-  --bg: #111827;
-  --surface: #1f2937;
-  --surface-2: #273244;
-  --border: #374151;
-  --text: #f3f4f6;
-  --muted: #9ca3af;
-  --accent: #f59e0b;
-  --accent-strong: #d97706;
-  --on-accent: #111827;
+  /* Colores del ecosistema (@dotrino/theme, CONVENCIONES §5). Los de la cancha (las dos
+     mitades, el ganador) y el rojo de borrar son del marcador y no cambian con el tema. */
+  --bg: var(--dt-bg);
+  --surface: var(--dt-surface);
+  --surface-2: var(--dt-surface-2);
+  --border: var(--dt-line-soft);
+  --text: var(--dt-text);
+  --muted: var(--dt-text-dim);
+  --accent: var(--dt-accent);
+  --accent-strong: var(--dt-accent-press);
+  --on-accent: var(--dt-accent-ink);
   --danger: #b91c1c;
   --danger-strong: #7f1d1d;
   --win: #fde047;
@@ -22,7 +24,7 @@
 html, body {
   height: 100%;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--dt-font);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -36,14 +38,6 @@ input { user-select: text; -webkit-user-select: text; font: inherit; }
 button { font: inherit; }
 
 /* --- Barra superior: estilos del light DOM para <dotrino-topbar> --- */
-dotrino-topbar {
-  --dotrino-topbar-bg: var(--bg);
-  --dotrino-topbar-border: var(--surface);
-  --dotrino-topbar-text: #e2e8f0;
-  --dotrino-topbar-muted: var(--muted);
-  --dotrino-topbar-accent: var(--accent);
-  --dotrino-topbar-accent-text: var(--on-accent);
-}
 .tb-action {
   border: none;
   background: transparent;
@@ -55,7 +49,7 @@ dotrino-topbar {
   letter-spacing: .05em;
   cursor: pointer;
 }
-.tb-action:active { color: #fff; }
+.tb-action:active { color: var(--text); }
 .tb-action:disabled { opacity: .4; cursor: default; }
 .tb-icon { font-size: 20px; min-width: 40px; }
 /* Botón instalar (@dotrino/install): fantasma con borde, compacto. */
@@ -64,7 +58,7 @@ dotrino-topbar {
   flex: 0 0 auto;
   --cc-install-color: var(--text);
   --cc-install-bg: transparent;
-  --cc-install-bg-hover: rgba(255,255,255,.08);
+  --cc-install-bg-hover: var(--dt-surface-3);
   --cc-install-radius: 9px;
   --cc-install-pad: 6px 10px;
   --cc-install-gap: 6px;
@@ -142,7 +136,7 @@ dotrino-topbar {
   font-size: 16px;
   cursor: pointer;
 }
-.icon-btn:active { background: var(--surface-2); color: #fff; }
+.icon-btn:active { background: var(--surface-2); color: var(--text); }
 .input {
   width: 100%;
   min-width: 0;
@@ -203,7 +197,7 @@ dotrino-topbar {
   width: 36px; height: 36px; border-radius: 50%; border: none;
   background: transparent; color: var(--muted); font-size: 16px; cursor: pointer;
 }
-.linked-leave:active { background: var(--surface-2); color: #fff; }
+.linked-leave:active { background: var(--surface-2); color: var(--text); }
 
 .board {
   /* Ancho de la cancha del saque. Los paneles reservan su alto abajo, así el marcador
@@ -439,7 +433,7 @@ body.tiebreak .tie-badge { display: block; }
 #modalDialog { z-index: 30; }
 .modal-box {
   background: var(--surface);
-  color: #fff;
+  color: var(--text);
   border-radius: 12px;
   width: 100%;
   max-width: 520px;
@@ -464,7 +458,7 @@ body.tiebreak .tie-badge { display: block; }
 .modal-close {
   background: transparent;
   border: none;
-  color: #fff;
+  color: var(--text);
   font-size: 3vh;
   cursor: pointer;
   padding: 0 1vw;
@@ -487,8 +481,8 @@ body.tiebreak .tie-badge { display: block; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.result-score .winner { color: var(--win); }
-.result-sets { font-size: 1.7vh; color: #cbd5e1; margin-top: .4vh; font-variant-numeric: tabular-nums; }
+.result-score .winner { color: var(--dt-gold); }
+.result-sets { font-size: 1.7vh; color: var(--muted); margin-top: .4vh; font-variant-numeric: tabular-nums; }
 .btn-danger {
   background: var(--danger);
   border: none;
@@ -508,7 +502,7 @@ body.tiebreak .tie-badge { display: block; }
 
 .dialog-body { padding: 20px 20px 8px; }
 .dialog-body h2 { font-size: 18px; font-weight: 800; }
-.dialog-body p { margin-top: 8px; color: #cbd5e1; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.dialog-body p { margin-top: 8px; color: var(--dt-text-dim); font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
 .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding: 16px 20px 20px; }
 
 .toast {
@@ -592,7 +586,7 @@ body.tiebreak .tie-badge { display: block; }
   flex-wrap: wrap;
   padding: 14px;
   border-radius: 12px;
-  background: rgba(245,158,11,.12);
+  background: var(--dt-accent-tint);
   border: 1px solid var(--accent);
   font-size: 16px;
 }
@@ -717,7 +711,7 @@ body.tiebreak .tie-badge { display: block; }
 .field-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .label { display: block; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 label.label { margin-bottom: 8px; }
-.info-text { margin: 0 0 10px; color: #cbd5e1; font-size: 14px; line-height: 1.45; }
+.info-text { margin: 0 0 10px; color: var(--dt-text-dim); font-size: 14px; line-height: 1.45; }
 
 /* Reglas del torneo: se leen como texto y cada una se edita aparte. */
 .rule { padding: 12px 0; border-bottom: 1px solid var(--surface-2); }
@@ -728,7 +722,7 @@ label.label { margin-bottom: 8px; }
 .rule.open .rule-edit { border-color: var(--accent); color: var(--accent); }
 .rule-editor { margin-top: 12px; }
 /* Una regla que se guarda pero no se cumple tal cual (más canchas que jugadores). */
-.rule.warn .rule-text, .rule.warn .hint, .warn-text { color: #f87171; }
+.rule.warn .rule-text, .rule.warn .hint, .warn-text { color: var(--dt-error); }
 .setup-col > .field-roster { padding-top: 12px; }
 
 /* Sets de reglas: se elige uno solo, y cada uno enseña lo que activa. */
@@ -749,7 +743,7 @@ label.label { margin-bottom: 8px; }
   text-align: left;
   cursor: pointer;
 }
-.ruleset.on { border-color: var(--accent); background: rgba(245,158,11,.1); }
+.ruleset.on { border-color: var(--accent); background: var(--dt-accent-tint); }
 .ruleset[disabled] { opacity: .55; cursor: default; }
 .ruleset-name { font-size: 16px; font-weight: 800; overflow-wrap: anywhere; }
 .ruleset-name::before { content: '○ '; color: var(--muted); }
@@ -765,7 +759,7 @@ label.label { margin-bottom: 8px; }
   font-weight: 700;
 }
 .ruleset.on .ruleset-rules span { color: var(--text); }
-.ruleset .ruleset-rules span.warn-text { color: #f87171; border-color: #f87171; }
+.ruleset .ruleset-rules span.warn-text { color: var(--dt-error); border-color: var(--dt-error); }
 
 /* El formulario de reglas, en su modal (se abre desde cualquier pestaña). */
 #rulesPage { padding: 0 16px 16px; }
