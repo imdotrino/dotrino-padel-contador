@@ -39,6 +39,8 @@ targets:
       path: Padel/Info.plist
       properties:
         CFBundleDisplayName: Padel
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDevelopmentRegion: es
         CFBundleLocalizations: [es, en]
         UILaunchScreen:
