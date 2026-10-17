@@ -243,7 +243,7 @@ export const DICT = {
     liveFailed: 'No se pudo compartir el torneo: {reason}',
     // Solo en las apps nativas: lo que les falta para emitir como tu perfil.
     liveNeedsProfile: 'Para compartir en vivo, primero crea tu perfil en la app Dotrino.',
-    liveNeedsSigner: 'Este aparato no firma por tu perfil: dale permiso desde tu bóveda para compartir en vivo.',
+    liveNeedsSigner: 'Este aparato no firma por tu perfil: concede permiso a este aparato desde tu bóveda para compartir en vivo.',
     watchConnecting: 'Conectando con el torneo…', watchLive: 'Solo lectura · en vivo',
     watchWaiting: 'Esperando al organizador. Ves lo último que llegó.',
     watchWaitingEmpty: 'Esperando a que el organizador abra el torneo.',

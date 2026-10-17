@@ -492,7 +492,7 @@
   "liveShareText": "Sigue «{name}» en vivo",
   "liveFailed": "No se pudo compartir el torneo: {reason}",
   "liveNeedsProfile": "Para compartir en vivo, primero crea tu perfil en la app Dotrino.",
-  "liveNeedsSigner": "Este aparato no firma por tu perfil: dale permiso desde tu bóveda para compartir en vivo.",
+  "liveNeedsSigner": "Este aparato no firma por tu perfil: concede permiso a este aparato desde tu bóveda para compartir en vivo.",
   "watchConnecting": "Conectando con el torneo…",
   "watchLive": "Solo lectura · en vivo",
   "watchWaiting": "Esperando al organizador. Ves lo último que llegó.",
